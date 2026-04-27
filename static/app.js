@@ -9,6 +9,18 @@ let searchQuery = '';
 let watchedSet  = new Set();
 let dismissSet  = new Set();
 
+// ── Theme ─────────────────────────────────────────────────────────────────
+function applyTheme(light) {
+  document.body.classList.toggle('light', light);
+  document.getElementById('themeToggle').textContent = light ? '🌙' : '☀️';
+}
+function toggleTheme() {
+  const isLight = !document.body.classList.contains('light');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  applyTheme(isLight);
+}
+applyTheme(localStorage.getItem('theme') === 'light');
+
 // ── Clock ─────────────────────────────────────────────────────────────────
 function updateClock() {
   const fmt = (o) => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', ...o }).format(new Date());

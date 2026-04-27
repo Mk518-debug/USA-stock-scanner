@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════
-   Variables
+   Variables — Dark (default)
 ════════════════════════════════════════════════════════ */
 :root {
   --bg:       #07070f;
@@ -19,6 +19,55 @@
   --r:        8px;
   --r-sm:     4px;
 }
+
+/* ════════════════════════════════════════════════════════
+   Variables — Light mode
+════════════════════════════════════════════════════════ */
+body.light {
+  --bg:       #eef0f8;
+  --bg2:      #ffffff;
+  --bg3:      #f2f4fb;
+  --border:   #d8ddf0;
+  --border2:  #c4cae0;
+  --green:    #00875a;
+  --red:      #d32f2f;
+  --yellow:   #e65100;
+  --blue:     #1565c0;
+  --purple:   #6a1b9a;
+  --orange:   #bf360c;
+  --text:     #1a1a2e;
+  --text2:    #4a5278;
+  --text3:    #8890b8;
+}
+
+/* Light-mode specific overrides */
+body.light .header        { box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+body.light .stock-card    { box-shadow: 0 1px 6px rgba(0,0,0,.07); }
+body.light .stock-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+body.light .score-slider  { background: #c4cae0; }
+body.light .score-slider::-webkit-slider-thumb { background: var(--orange); }
+body.light .scan-btn-main { background: linear-gradient(135deg,#1565c0,#0d47a1); }
+body.light .overlay       { background: rgba(200,210,230,.88); }
+body.light .spinner       { border-color: var(--border2); border-top-color: var(--blue); }
+body.light .market-badge.closed { background: rgba(180,185,210,.15); }
+
+/* Theme toggle button */
+.theme-toggle {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { border-color: var(--blue); color: var(--blue); transform: rotate(20deg); }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
 body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
