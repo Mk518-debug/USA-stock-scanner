@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-News fetcher — uses ticker.news (lightweight, rarely rate-limited).
-Returns news items categorised and sorted newest-first.
+News fetcher using yfinance ticker.news.
+Handles both the NEW format (yfinance 0.2.40+) where news is nested under
+item['content'], and the OLD format where fields were at the top level.
 """
 import yfinance as yf
 import requests
@@ -30,10 +31,10 @@ _CATS = [
     (['acquires','acquisition','merger','takeover','buys '],
      'M&A', 'ma'),
     (['dividend','buyback','repurchase'],
-     'Dividend/Buyback', 'div'),
+     'Dividend', 'div'),
 ]
-
-_NEG = ['lawsuit','fraud','warning','recall','resign','investigation','fine','penalty','miss','misses']
+_NEG = ['lawsuit','fraud','warning','recall','resign','investigation','fine','miss','misses','decline']
+_POS = ['beat','record','growth','raised','profit','strong','win','upgrade','launch','approved']
 
 
 def _cat(title):
@@ -44,39 +45,88 @@ def _cat(title):
     return 'News', 'news'
 
 
-def _time_ago(ts):
-    try:
-        if not ts:
-            return ''
-        delta = int(datetime.now(timezone.utc).timestamp()) - int(ts)
-        if delta < 0:
-            return 'just now'
-        if delta < 3600:
-            return '%dm ago' % max(1, delta // 60)
-        if delta < 86400:
-            return '%dh ago' % (delta // 3600)
-        if delta < 604800:
-            return '%dd ago' % (delta // 86400)
-        return datetime.utcfromtimestamp(ts).strftime('%b %d')
-    except Exception:
-        return ''
-
-
 def _sentiment(title):
     tl = title.lower()
     neg = sum(1 for k in _NEG if k in tl)
-    pos = sum(1 for k in ['record','growth','beat','beats','raised','profit','strong','win','upgrade','launch'] if k in tl)
+    pos = sum(1 for k in _POS if k in tl)
     if neg > pos: return 'neg'
     if pos > neg: return 'pos'
     return 'neu'
 
 
+def _parse_pubdate(s):
+    """Convert ISO date string '2026-04-27T15:36:47Z' → Unix timestamp int."""
+    if not s:
+        return 0
+    try:
+        return int(datetime.strptime(s, '%Y-%m-%dT%H:%M:%SZ')
+                   .replace(tzinfo=timezone.utc).timestamp())
+    except Exception:
+        return 0
+
+
+def _time_ago(ts):
+    try:
+        if not ts:
+            return ''
+        delta = int(datetime.now(timezone.utc).timestamp()) - int(ts)
+        if delta < 0:    return 'just now'
+        if delta < 3600: return '%dm ago' % max(1, delta // 60)
+        if delta < 86400:return '%dh ago' % (delta // 3600)
+        if delta < 604800:return '%dd ago' % (delta // 86400)
+        return datetime.utcfromtimestamp(ts).strftime('%b %d')
+    except Exception:
+        return ''
+
+
+def _parse_item(item):
+    """
+    Parse one news item from yfinance, handling both formats:
+      NEW (0.2.40+): item = {'id': ..., 'content': {...}}
+      OLD           : item = {'title': ..., 'link': ..., 'publisher': ..., ...}
+    Returns (title, url, source, ts, thumb) or None if item is invalid.
+    """
+    # ── NEW format ─────────────────────────────────────────────────────────
+    if 'content' in item:
+        c = item['content'] or {}
+        title = (c.get('title') or '').strip()
+        if not title:
+            return None
+        url = ((c.get('clickThroughUrl') or c.get('canonicalUrl') or {})
+               .get('url') or '#')
+        source = ((c.get('provider') or {}).get('displayName') or '')
+        ts     = _parse_pubdate(c.get('pubDate') or c.get('displayTime'))
+        thumb  = ((c.get('thumbnail') or {}).get('originalUrl') or '')
+        # Fallback to first resolution if originalUrl missing
+        if not thumb:
+            try:
+                resolutions = (c.get('thumbnail') or {}).get('resolutions', [])
+                if resolutions:
+                    thumb = resolutions[0].get('url', '')
+            except Exception:
+                pass
+        return title, url, source, ts, thumb
+
+    # ── OLD format ─────────────────────────────────────────────────────────
+    title = (item.get('title') or '').strip()
+    if not title:
+        return None
+    url    = item.get('link') or '#'
+    source = item.get('publisher') or ''
+    ts     = int(item.get('providerPublishTime') or 0)
+    thumb  = ''
+    try:
+        resolutions = (item.get('thumbnail') or {}).get('resolutions', [])
+        if resolutions:
+            thumb = resolutions[0].get('url', '')
+    except Exception:
+        pass
+    return title, url, source, ts, thumb
+
+
 def fetch_news(symbols, max_per_symbol=6):
-    """
-    Fetch recent news for each symbol.
-    Returns list sorted newest-first.
-    """
-    news_list = []
+    """Fetch and categorise recent news for each symbol. Returns list newest-first."""
+    news_list   = []
     seen_titles = set()
 
     for sym in symbols[:20]:
@@ -85,29 +135,23 @@ def fetch_news(symbols, max_per_symbol=6):
             raw    = ticker.news
             if not isinstance(raw, list):
                 continue
+
             for item in raw[:max_per_symbol]:
-                title = (item.get('title') or '').strip()
-                if not title or title in seen_titles:
+                parsed = _parse_item(item)
+                if parsed is None:
+                    continue
+                title, url, source, ts, thumb = parsed
+
+                if title in seen_titles:
                     continue
                 seen_titles.add(title)
 
                 cat, cat_cls = _cat(title)
-                ts = int(item.get('providerPublishTime') or 0)
-
-                # Thumbnail (first resolution if available)
-                thumb = ''
-                try:
-                    resolutions = (item.get('thumbnail') or {}).get('resolutions', [])
-                    if resolutions:
-                        thumb = resolutions[0].get('url', '')
-                except Exception:
-                    pass
-
                 news_list.append({
                     'symbol':    sym,
                     'title':     title,
-                    'url':       item.get('link') or '#',
-                    'source':    item.get('publisher') or '',
+                    'url':       url,
+                    'source':    source,
                     'time_raw':  ts,
                     'time_str':  _time_ago(ts),
                     'cat':       cat,
