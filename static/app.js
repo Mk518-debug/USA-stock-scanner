@@ -1,5 +1,31 @@
 'use strict';
 
+// ── Scroll zone sizing ────────────────────────────────────────────────────
+// Explicitly set the height of scroll zones in pixels so every browser
+// shows a scrollbar correctly, regardless of CSS flex quirks.
+function fitScrollZones() {
+  const header  = document.querySelector('.header');
+  const sticky  = document.querySelector('.sticky-bars');
+  const sidebar = document.querySelector('.sidebar');
+
+  const winH    = window.innerHeight;
+  const headerH = header  ? header.offsetHeight  : 56;
+  const stickyH = sticky  ? sticky.offsetHeight  : 0;
+  const scrollH = Math.max(100, winH - headerH - stickyH);
+
+  const zones = ['cardsArea', 'newsArea'];
+  zones.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.height = scrollH + 'px';
+  });
+
+  // Sidebar height
+  if (sidebar) sidebar.style.height = winH + 'px';
+}
+
+window.addEventListener('load',   fitScrollZones);
+window.addEventListener('resize', fitScrollZones);
+
 // ── State ─────────────────────────────────────────────────────────────────
 let allResults  = [];
 let activeTab   = 'all';
@@ -113,6 +139,8 @@ async function startScan(force = false) {
     document.querySelector('.ftab[data-tab="all"]').classList.add('active');
     activeTab = 'all';
     render();
+    // Recalculate after sticky-bars grows (stats + filter now visible)
+    requestAnimationFrame(fitScrollZones);
   } catch (err) {
     document.getElementById('cardsArea').innerHTML = `<div class="error-msg">❌ ${err.message}</div>`;
   } finally {
