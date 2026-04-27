@@ -125,10 +125,11 @@ def research():
 
     cache_key = 'research|' + ','.join(sorted(symbols))
     if not force:
-        cached = _cget(cache_key)
-        if cached:
-            cached['from_cache'] = True
-            return jsonify(cached)
+        # Use 1-hour TTL for research (fundamental data changes slowly)
+        entry = _cache.get(cache_key)
+        if entry and (time.time() - entry['ts'] < 3600):
+            entry['data']['from_cache'] = True
+            return jsonify(entry['data'])
 
     results = run_research(symbols)
     if min_score > 0:
