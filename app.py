@@ -12,6 +12,14 @@ from fundamental import run_research, DEFAULT_RESEARCH
 app = Flask(__name__)
 CORS(app)
 
+
+@app.errorhandler(Exception)
+def handle_any_exception(e):
+    """Catch-all: always return JSON so the browser never gets an HTML error page."""
+    traceback.print_exc()
+    return jsonify({'error': str(e), 'results': [], 'total': 0,
+                    'total_found': 0, 'results': []}), 500
+
 # ── 15-minute result cache ────────────────────────────────────────────────────
 _cache     = {}
 _CACHE_TTL = 900
@@ -116,10 +124,10 @@ def scan():
 
 @app.route('/api/research', methods=['POST'])
 def research():
-    data      = request.get_json(force=True)
+    data      = request.get_json(force=True) or {}
     custom    = data.get('symbols', [])
     force     = data.get('force', False)
-    min_score = int(data.get('min_score', 0))
+    min_score = int(data.get('min_score', 0) or 0)
 
     symbols = [s.strip().upper() for s in custom if s.strip()] if custom else DEFAULT_RESEARCH
     symbols = symbols[:30]
