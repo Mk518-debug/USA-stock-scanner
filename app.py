@@ -141,10 +141,11 @@ def research():
             return jsonify(entry['data'])
 
     try:
-        results = run_research(symbols)
+        results, warning = run_research(symbols)
     except Exception as e:
         traceback.print_exc()
-        return jsonify({'error': str(e), 'results': [], 'total': 0}), 500
+        return jsonify({'error': str(e), 'results': [], 'total': 0,
+                        'warning': 'error'}), 500
 
     if min_score > 0:
         results = [r for r in results if r['overall_score'] >= min_score]
@@ -157,9 +158,12 @@ def research():
         'product_launches': len([r for r in results if 'launch' in (r.get('catalysts') or [])]),
         'earn_beats':       len([r for r in results if r.get('earn_score', 0) >= 60]),
         'timestamp':        ny_time(),
+        'warning':          warning,
         'from_cache':       False,
     }
-    _cset(cache_key, payload)
+    # Only cache successful full results
+    if warning == 'ok':
+        _cset(cache_key, payload)
     return jsonify(payload)
 
 

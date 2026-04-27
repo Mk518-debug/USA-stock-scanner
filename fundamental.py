@@ -270,15 +270,33 @@ def analyze_fundamental(symbol):
         print('  [err] %s: %s' % (symbol, e))
         return None
 
+# ── Quick connectivity check ───────────────────────────────────────────────
+def _yahoo_ok():
+    """Fast check using yf.download (different endpoint, rarely rate-limited)."""
+    try:
+        import yfinance as _yf
+        df = _yf.download('AAPL', period='1d', interval='1d',
+                          progress=False, auto_adjust=True)
+        return not df.empty
+    except Exception:
+        return False
+
+
 # ── Run batch ──────────────────────────────────────────────────────────────
 def run_research(symbols, max_secs=55):
     """
     Sequential, no retries. Hard deadline = max_secs seconds.
-    Skips any stock that errors or rate-limits.
+    Returns (results, warning_message).
     """
-    symbols   = list(symbols)[:15]
-    results   = []
-    deadline  = time.time() + max_secs
+    symbols  = list(symbols)[:15]
+    results  = []
+    skipped  = 0
+    deadline = time.time() + max_secs
+
+    # Pre-flight: if Yahoo Finance is completely inaccessible, fail fast
+    if not _yahoo_ok():
+        print('  [research] Yahoo Finance unreachable — rate limited')
+        return [], 'rate_limited'
 
     for i, sym in enumerate(symbols):
         if time.time() >= deadline:
@@ -288,8 +306,15 @@ def run_research(symbols, max_secs=55):
         res = analyze_fundamental(sym)
         if res:
             results.append(res)
+        else:
+            skipped += 1
         if i < len(symbols) - 1 and time.time() < deadline - 1:
             time.sleep(1.5)
 
     results.sort(key=lambda x: x['overall_score'], reverse=True)
-    return results
+
+    if not results and skipped > 0:
+        return [], 'rate_limited'
+    if skipped > len(results):
+        return results, 'partial'
+    return results, 'ok'

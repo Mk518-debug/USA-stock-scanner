@@ -447,7 +447,30 @@ async function startResearch(force = false) {
     }
     if (!res.ok) throw new Error(data.error || ('Server error ' + res.status));
 
-    resResults = data.results;
+    resResults = data.results || [];
+
+    // Rate-limit early exit — show helpful message, don't render empty table
+    if (data.warning === 'rate_limited') {
+      document.getElementById('resCardsArea').innerHTML = `
+        <div class="empty-msg" style="max-width:480px;margin:40px auto;text-align:center">
+          <div style="font-size:2.5rem;margin-bottom:12px">⏳</div>
+          <div style="font-size:1rem;font-weight:700;color:var(--yellow);margin-bottom:8px">
+            Yahoo Finance is Rate Limiting This Server
+          </div>
+          <div style="font-size:0.85rem;color:var(--text2);line-height:1.6;margin-bottom:16px">
+            Too many requests were made recently.<br>
+            Please <strong>wait 2–3 minutes</strong> then click <strong>↺ Refresh</strong>.
+          </div>
+          <button onclick="startResearch(true)" style="background:rgba(68,138,255,.15);border:1px solid rgba(68,138,255,.3);color:var(--blue);padding:8px 20px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600">
+            ↺ Try Again
+          </button>
+        </div>`;
+      document.getElementById('resStatsTop').style.display  = 'none';
+      document.getElementById('resFilterBar').style.display = 'none';
+      setLoading(false, true);
+      return;
+    }
+
     updateResStats(data);
 
     document.getElementById('resStatsTop').style.display  = 'grid';
@@ -496,7 +519,10 @@ function resRender() {
   const list  = [...resFiltered()].sort((a, b) => (b[key] || 0) - (a[key] || 0));
 
   if (!list.length) {
-    wrap.innerHTML = '<div class="empty-msg">No companies match the current filters.</div>';
+    const hint = resResults.length === 0
+      ? 'No data was retrieved. Yahoo Finance may be rate-limiting — wait 2 min and click ↺ Refresh.'
+      : 'No companies match the active filter. Try "All" tab or lower the min grade.';
+    wrap.innerHTML = '<div class="empty-msg">' + hint + '</div>';
     return;
   }
   wrap.innerHTML = '<div class="research-grid">' + list.map(buildResCard).join('') + '</div>';
