@@ -22,6 +22,13 @@
           <div class="brand-sub">Real-time Technical Analysis</div>
         </div>
       </div>
+
+      <!-- Mode Tabs -->
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="modeScanner"  onclick="switchMode('scanner')">📊 Scanner</button>
+        <button class="mode-tab"        id="modeResearch" onclick="switchMode('research')">🔬 Deep Research</button>
+      </div>
+
       <div class="header-right">
         <span id="marketStatus" class="market-badge closed">● CLOSED</span>
         <span id="nyTime" class="ny-time">Loading…</span>
@@ -29,68 +36,141 @@
       </div>
     </header>
 
-    <!-- Stats Top Bar -->
-    <div class="stats-top" id="statsTop" style="display:none">
-      <div class="stats-box">
-        <div class="sb-num" id="sAnalyzed">0</div>
-        <div class="sb-label">Stocks Scanned</div>
-      </div>
-      <div class="stats-box fire-box">
-        <div class="sb-num fire" id="sStrong">0</div>
-        <div class="sb-label">🔥 Strong Signals</div>
-        <div class="sb-sub">Score ≥ 80</div>
-      </div>
-      <div class="stats-box">
-        <div class="sb-trend" id="sTrend">—</div>
-        <div class="sb-label">Prevailing Trend</div>
-      </div>
-      <div class="stats-box">
-        <div class="sb-time" id="sTime">—</div>
-        <div class="sb-label">Last Scan</div>
-        <span id="cacheTag" class="cache-tag" style="display:none">⚡ Cached</span>
-      </div>
-    </div>
+    <!-- ══ SCANNER PANEL ══ -->
+    <div id="scannerPanel">
 
-    <!-- Filter / Tab Bar -->
-    <div class="filter-bar" id="filterBar" style="display:none">
-      <div class="ftabs">
-        <button class="ftab active" data-tab="all">All</button>
-        <button class="ftab" data-tab="bullish">▲ Bullish</button>
-        <button class="ftab" data-tab="bearish">▼ Bearish</button>
-        <button class="ftab" data-tab="s80">🔥 80+</button>
-        <button class="ftab" data-tab="strong">⚡ Strong Buy</button>
-        <button class="ftab" data-tab="open">📌 Watching</button>
-      </div>
-      <div class="filter-right">
-        <input id="cardSearch" class="card-search" type="text" placeholder="🔍 Search stocks…" oninput="onSearch(this.value)">
-        <select id="sortSel" class="ctrl-select sm-sel" onchange="render()">
-          <option value="score">Score ↓</option>
-          <option value="change_pct">Change %</option>
-          <option value="rsi">RSI</option>
-          <option value="vol_ratio">Volume</option>
-          <option value="price">Price</option>
-        </select>
-        <button class="close-all-btn" onclick="closeAllWatched()">✕ Close All</button>
-      </div>
-    </div>
-
-    <!-- Cards Area -->
-    <div class="cards-area" id="cardsArea">
-      <div class="welcome" id="welcomeScreen">
-        <div class="welcome-icon">📈</div>
-        <div class="welcome-title">USA Stock Scanner</div>
-        <div class="welcome-desc">Configure filters in the sidebar and click <strong>START SCAN</strong></div>
-        <div class="welcome-note">📅 Works 24/7 — uses latest available data even when markets are closed</div>
-        <div class="feature-row">
-          <span class="feat">📡 TradingView Data</span>
-          <span class="feat">📊 EMA Trend</span>
-          <span class="feat">⚡ MACD Signal</span>
-          <span class="feat">📈 RSI Momentum</span>
-          <span class="feat">💹 Volume Spike</span>
-          <span class="feat">🎯 Entry &amp; Targets</span>
+      <!-- Stats Top Bar -->
+      <div class="stats-top" id="statsTop" style="display:none">
+        <div class="stats-box">
+          <div class="sb-num" id="sAnalyzed">0</div>
+          <div class="sb-label">Stocks Scanned</div>
+        </div>
+        <div class="stats-box fire-box">
+          <div class="sb-num fire" id="sStrong">0</div>
+          <div class="sb-label">🔥 Strong Signals</div>
+          <div class="sb-sub">Score ≥ 80</div>
+        </div>
+        <div class="stats-box">
+          <div class="sb-trend" id="sTrend">—</div>
+          <div class="sb-label">Prevailing Trend</div>
+        </div>
+        <div class="stats-box">
+          <div class="sb-time" id="sTime">—</div>
+          <div class="sb-label">Last Scan</div>
+          <span id="cacheTag" class="cache-tag" style="display:none">⚡ Cached</span>
         </div>
       </div>
-    </div>
+
+      <!-- Filter / Tab Bar -->
+      <div class="filter-bar" id="filterBar" style="display:none">
+        <div class="ftabs">
+          <button class="ftab active" data-tab="all">All</button>
+          <button class="ftab" data-tab="bullish">▲ Bullish</button>
+          <button class="ftab" data-tab="bearish">▼ Bearish</button>
+          <button class="ftab" data-tab="s80">🔥 80+</button>
+          <button class="ftab" data-tab="strong">⚡ Strong Buy</button>
+          <button class="ftab" data-tab="open">📌 Watching</button>
+        </div>
+        <div class="filter-right">
+          <input id="cardSearch" class="card-search" type="text" placeholder="🔍 Search stocks…" oninput="onSearch(this.value)">
+          <select id="sortSel" class="ctrl-select sm-sel" onchange="render()">
+            <option value="score">Score ↓</option>
+            <option value="change_pct">Change %</option>
+            <option value="rsi">RSI</option>
+            <option value="vol_ratio">Volume</option>
+            <option value="price">Price</option>
+          </select>
+          <button class="close-all-btn" onclick="closeAllWatched()">✕ Close All</button>
+        </div>
+      </div>
+
+      <!-- Scanner Cards Area -->
+      <div class="cards-area" id="cardsArea">
+        <div class="welcome" id="welcomeScreen">
+          <div class="welcome-icon">📈</div>
+          <div class="welcome-title">USA Stock Scanner</div>
+          <div class="welcome-desc">Configure filters in the sidebar and click <strong>START SCAN</strong></div>
+          <div class="welcome-note">📅 Works 24/7 — uses latest available data even when markets are closed</div>
+          <div class="feature-row">
+            <span class="feat">📡 TradingView Data</span>
+            <span class="feat">📊 EMA Trend</span>
+            <span class="feat">⚡ MACD Signal</span>
+            <span class="feat">📈 RSI Momentum</span>
+            <span class="feat">💹 Volume Spike</span>
+            <span class="feat">🎯 Entry &amp; Targets</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end #scannerPanel -->
+
+    <!-- ══ RESEARCH PANEL ══ -->
+    <div id="researchPanel" style="display:none">
+
+      <!-- Research Stats Bar -->
+      <div class="stats-top" id="resStatsTop" style="display:none">
+        <div class="stats-box">
+          <div class="sb-num" id="rTotal">0</div>
+          <div class="sb-label">Companies Analyzed</div>
+        </div>
+        <div class="stats-box" style="background:rgba(0,230,118,.04)">
+          <div class="sb-num" style="color:var(--green)" id="rAGrade">0</div>
+          <div class="sb-label">Grade A / A+</div>
+        </div>
+        <div class="stats-box">
+          <div class="sb-num" style="color:var(--blue)" id="rCatalysts">0</div>
+          <div class="sb-label">Have Catalysts</div>
+        </div>
+        <div class="stats-box">
+          <div class="sb-num" style="color:var(--yellow)" id="rLaunches">0</div>
+          <div class="sb-label">🚀 Product Launches</div>
+        </div>
+        <div class="stats-box">
+          <div class="sb-time" id="rTime">—</div>
+          <div class="sb-label">Last Research</div>
+          <span id="resCacheTag" class="cache-tag" style="display:none">⚡ Cached</span>
+        </div>
+      </div>
+
+      <!-- Research Filter Bar -->
+      <div class="filter-bar" id="resFilterBar" style="display:none">
+        <div class="ftabs">
+          <button class="ftab active" data-rtab="all">All</button>
+          <button class="ftab" data-rtab="agrade">⭐ A Grade</button>
+          <button class="ftab" data-rtab="catalyst">⚡ Has Catalyst</button>
+          <button class="ftab" data-rtab="launch">🚀 Product Launch</button>
+          <button class="ftab" data-rtab="earnings">📈 Earnings Beat</button>
+        </div>
+        <div class="filter-right">
+          <input id="resSearch" class="card-search" type="text" placeholder="🔍 Search companies…" oninput="resOnSearch(this.value)">
+          <select id="resSortSel" class="ctrl-select sm-sel" onchange="resRender()">
+            <option value="overall_score">Overall Score</option>
+            <option value="fin_score">Financial Health</option>
+            <option value="earn_score">Earnings Quality</option>
+            <option value="news_score">News Score</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Research Cards Area -->
+      <div class="cards-area" id="resCardsArea">
+        <div class="welcome" id="resWelcome">
+          <div class="welcome-icon">🔬</div>
+          <div class="welcome-title">Deep Fundamental Research</div>
+          <div class="welcome-desc">Analyze companies by financial health, earnings quality &amp; news catalysts</div>
+          <div class="welcome-note">⏱ Each company takes ~2 sec — allow 30–60 sec for a full batch</div>
+          <div class="feature-row">
+            <span class="feat">💰 Financial Health</span>
+            <span class="feat">📈 Earnings Quality</span>
+            <span class="feat">🚀 Product Launches</span>
+            <span class="feat">🤝 Partnerships</span>
+            <span class="feat">⬆ Analyst Upgrades</span>
+            <span class="feat">📊 EPS Beats</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end #researchPanel -->
 
   </div><!-- end .main-content -->
 
@@ -98,80 +178,118 @@
   <div class="sidebar">
     <div class="sidebar-body">
 
-      <!-- Scan Type -->
-      <div class="sb-sec">
-        <div class="sb-sec-label">Scan Type</div>
-        <div class="seg-group" id="scanTypeGroup">
-          <button class="seg-btn active" data-type="comprehensive">Comprehensive</button>
-          <button class="seg-btn" data-type="trend">Trend</button>
-          <button class="seg-btn" data-type="reversal">Reversal</button>
-        </div>
-      </div>
+      <!-- ── Scanner sidebar content ── -->
+      <div id="scannerSide">
 
-      <!-- Timeframe -->
-      <div class="sb-sec">
-        <div class="sb-sec-label">Timeframe</div>
-        <div class="seg-group" id="tfGroup">
-          <button class="seg-btn active" data-tf="1d">1D</button>
-          <button class="seg-btn" data-tf="4h">4H</button>
-          <button class="seg-btn" data-tf="1h">1H</button>
-          <button class="seg-btn" data-tf="15m">15m</button>
-        </div>
-      </div>
-
-      <!-- Min Score Slider -->
-      <div class="sb-sec">
-        <div class="sb-sec-label">Min Score &nbsp;<span id="scoreDisplay" class="score-display">50</span></div>
-        <input id="minScore" class="score-slider" type="range" min="0" max="100" value="50"
-          oninput="document.getElementById('scoreDisplay').textContent=this.value">
-      </div>
-
-      <!-- Market / Custom tabs -->
-      <div class="sb-sec">
-        <div class="market-tabs">
-          <button class="mtab active" id="mtAll" onclick="switchMarket('all')">All Market</button>
-          <button class="mtab" id="mtCustom" onclick="switchMarket('custom')">Custom List</button>
-        </div>
-      </div>
-
-      <!-- All Market panel -->
-      <div id="allPanel">
         <div class="sb-sec">
-          <div class="sb-sec-label">Sector Filter</div>
-          <select id="sectorSel" class="ctrl-select full-w">
-            <option value="all">All Sectors</option>
-            <option value="Technology">Technology</option>
-            <option value="Finance">Finance</option>
-            <option value="Healthcare">Healthcare</option>
-            <option value="Energy">Energy</option>
-            <option value="Consumer">Consumer</option>
-            <option value="Industrial">Industrial</option>
-            <option value="Communication">Communication</option>
-            <option value="Materials">Materials</option>
-          </select>
-        </div>
-        <div class="sb-sec no-bottom">
-          <div class="sb-sec-label">Stocks <span id="slCount" class="sl-count-badge"></span></div>
-          <div class="stock-list" id="stockList">
-            <div class="sl-empty">Stocks appear after scan</div>
+          <div class="sb-sec-label">Scan Type</div>
+          <div class="seg-group" id="scanTypeGroup">
+            <button class="seg-btn active" data-type="comprehensive">Comprehensive</button>
+            <button class="seg-btn" data-type="trend">Trend</button>
+            <button class="seg-btn" data-type="reversal">Reversal</button>
           </div>
         </div>
-      </div>
 
-      <!-- Custom List panel -->
-      <div id="customPanel" style="display:none">
         <div class="sb-sec">
-          <div class="sb-sec-label">Enter Symbols (one per line)</div>
-          <textarea id="symInput" class="sym-ta" placeholder="AAPL&#10;MSFT&#10;NVDA&#10;TSLA&#10;AMZN"></textarea>
+          <div class="sb-sec-label">Timeframe</div>
+          <div class="seg-group" id="tfGroup">
+            <button class="seg-btn active" data-tf="1d">1D</button>
+            <button class="seg-btn" data-tf="4h">4H</button>
+            <button class="seg-btn" data-tf="1h">1H</button>
+            <button class="seg-btn" data-tf="15m">15m</button>
+          </div>
         </div>
-      </div>
+
+        <div class="sb-sec">
+          <div class="sb-sec-label">Min Score &nbsp;<span id="scoreDisplay" class="score-display">50</span></div>
+          <input id="minScore" class="score-slider" type="range" min="0" max="100" value="50"
+            oninput="document.getElementById('scoreDisplay').textContent=this.value">
+        </div>
+
+        <div class="sb-sec">
+          <div class="market-tabs">
+            <button class="mtab active" id="mtAll" onclick="switchMarket('all')">All Market</button>
+            <button class="mtab" id="mtCustom" onclick="switchMarket('custom')">Custom List</button>
+          </div>
+        </div>
+
+        <div id="allPanel">
+          <div class="sb-sec">
+            <div class="sb-sec-label">Sector Filter</div>
+            <select id="sectorSel" class="ctrl-select full-w">
+              <option value="all">All Sectors</option>
+              <option value="Technology">Technology</option>
+              <option value="Finance">Finance</option>
+              <option value="Healthcare">Healthcare</option>
+              <option value="Energy">Energy</option>
+              <option value="Consumer">Consumer</option>
+              <option value="Industrial">Industrial</option>
+              <option value="Communication">Communication</option>
+              <option value="Materials">Materials</option>
+            </select>
+          </div>
+          <div class="sb-sec no-bottom">
+            <div class="sb-sec-label">Stocks <span id="slCount" class="sl-count-badge"></span></div>
+            <div class="stock-list" id="stockList">
+              <div class="sl-empty">Stocks appear after scan</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="customPanel" style="display:none">
+          <div class="sb-sec">
+            <div class="sb-sec-label">Enter Symbols (one per line)</div>
+            <textarea id="symInput" class="sym-ta" placeholder="AAPL&#10;MSFT&#10;NVDA&#10;TSLA&#10;AMZN"></textarea>
+          </div>
+        </div>
+
+      </div><!-- end #scannerSide -->
+
+      <!-- ── Research sidebar content ── -->
+      <div id="researchSide" style="display:none">
+
+        <div class="sb-sec">
+          <div class="sb-sec-label">Companies to Analyze</div>
+          <div class="sb-hint">One symbol per line · max 30</div>
+          <textarea id="resSymInput" class="sym-ta" style="height:200px"
+            placeholder="AAPL&#10;MSFT&#10;GOOGL&#10;NVDA&#10;AMZN&#10;META&#10;JPM&#10;V&#10;JNJ&#10;UNH&#10;LLY&#10;HD&#10;WMT&#10;TSLA&#10;AVGO"></textarea>
+        </div>
+
+        <div class="sb-sec">
+          <div class="sb-sec-label">Minimum Grade</div>
+          <div class="seg-group" id="resGradeGroup">
+            <button class="seg-btn active" data-grade="0">All</button>
+            <button class="seg-btn" data-grade="55">B+</button>
+            <button class="seg-btn" data-grade="75">A</button>
+          </div>
+        </div>
+
+        <div class="sb-sec no-bottom">
+          <div class="sb-sec-label">What We Check</div>
+          <div class="res-checklist">
+            <div class="rc-check">✓ Debt/Equity &amp; Liquidity</div>
+            <div class="rc-check">✓ Return on Equity &amp; Margins</div>
+            <div class="rc-check">✓ Free Cash Flow</div>
+            <div class="rc-check">✓ Revenue &amp; Earnings Growth</div>
+            <div class="rc-check">✓ EPS Beats (last 4 quarters)</div>
+            <div class="rc-check">✓ EPS Surprise %</div>
+            <div class="rc-check">✓ Product Launches in News</div>
+            <div class="rc-check">✓ Analyst Upgrades</div>
+            <div class="rc-check">✓ Partnerships &amp; M&amp;A</div>
+          </div>
+        </div>
+
+      </div><!-- end #researchSide -->
 
     </div><!-- end .sidebar-body -->
 
-    <!-- Scan Button -->
+    <!-- Action Button (changes based on mode) -->
     <div class="sidebar-foot">
-      <button id="scanBtn" class="scan-btn-main" onclick="startScan()">
-        <span id="scanBtnText">🔍 START SCAN</span>
+      <button id="mainBtn" class="scan-btn-main" onclick="onMainBtn()">
+        <span id="mainBtnText">🔍 START SCAN</span>
+      </button>
+      <button id="refreshBtn" class="refresh-main-btn" onclick="onMainBtn(true)" style="display:none" title="Force refresh">
+        ↺ Refresh
       </button>
     </div>
   </div><!-- end .sidebar -->
@@ -182,9 +300,9 @@
 <div id="loadingOverlay" class="overlay" style="display:none">
   <div class="overlay-box">
     <div class="spinner"></div>
-    <div class="overlay-title">Scanning US Markets…</div>
-    <div class="overlay-sub">Fetching real-time data · works market open or closed</div>
-    <div class="overlay-note">⏱ ~3 sec via TradingView · ~60 sec via Yahoo Finance</div>
+    <div class="overlay-title" id="overlayTitle">Scanning US Markets…</div>
+    <div class="overlay-sub" id="overlaySub">Fetching real-time data · works market open or closed</div>
+    <div class="overlay-note" id="overlayNote">⏱ ~3 sec via TradingView · ~60 sec via Yahoo Finance</div>
   </div>
 </div>
 

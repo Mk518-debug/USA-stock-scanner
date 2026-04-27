@@ -339,9 +339,251 @@ function closeAllWatched() {
 }
 
 // ── Loading ───────────────────────────────────────────────────────────────
-function setLoading(on) {
+function setLoading(on, isResearch = false) {
   document.getElementById('loadingOverlay').style.display = on ? 'flex' : 'none';
-  const btn = document.getElementById('scanBtn');
+  const btn  = document.getElementById('mainBtn');
   btn.disabled = on;
-  document.getElementById('scanBtnText').textContent = on ? '⏳ SCANNING…' : '🔍 START SCAN';
+  if (isResearch) {
+    document.getElementById('mainBtnText').textContent    = on ? '⏳ RESEARCHING…' : '🔬 RUN RESEARCH';
+    document.getElementById('overlayTitle').textContent   = 'Running Deep Research…';
+    document.getElementById('overlaySub').textContent     = 'Fetching financials, earnings & news for each company';
+    document.getElementById('overlayNote').textContent    = '⏱ ~2 sec per company · allow 30–60 sec total';
+  } else {
+    document.getElementById('mainBtnText').textContent    = on ? '⏳ SCANNING…' : '🔍 START SCAN';
+    document.getElementById('overlayTitle').textContent   = 'Scanning US Markets…';
+    document.getElementById('overlaySub').textContent     = 'Fetching real-time data · works market open or closed';
+    document.getElementById('overlayNote').textContent    = '⏱ ~3 sec via TradingView · ~60 sec via Yahoo Finance';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  MODE SWITCHING
+// ══════════════════════════════════════════════════════════════════════════
+let currentMode = 'scanner';
+
+function switchMode(mode) {
+  currentMode = mode;
+  const isRes = mode === 'research';
+
+  document.getElementById('modeScanner').classList.toggle('active',  !isRes);
+  document.getElementById('modeResearch').classList.toggle('active',  isRes);
+
+  document.getElementById('scannerPanel').style.display  = isRes ? 'none' : 'flex';
+  document.getElementById('scannerPanel').style.flexDirection = 'column';
+  document.getElementById('researchPanel').style.display = isRes ? 'flex' : 'none';
+  document.getElementById('researchPanel').style.flexDirection = 'column';
+
+  document.getElementById('scannerSide').style.display  = isRes ? 'none' : '';
+  document.getElementById('researchSide').style.display = isRes ? '' : 'none';
+
+  document.getElementById('mainBtnText').textContent = isRes ? '🔬 RUN RESEARCH' : '🔍 START SCAN';
+  document.getElementById('refreshBtn').style.display = 'none';
+}
+
+function onMainBtn(force = false) {
+  if (currentMode === 'research') startResearch(force);
+  else startScan(force);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  DEEP RESEARCH
+// ══════════════════════════════════════════════════════════════════════════
+let resResults   = [];
+let resActiveTab = 'all';
+let resSearch    = '';
+let resMinScore  = 0;
+let resDismissSet = new Set();
+
+// Segment group for min grade
+document.querySelectorAll('#resGradeGroup .seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#resGradeGroup .seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    resMinScore = parseInt(btn.dataset.grade) || 0;
+    resRender();
+  });
+});
+
+// Research tab buttons
+document.querySelectorAll('[data-rtab]').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('[data-rtab]').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    resActiveTab = tab.dataset.rtab;
+    resRender();
+  });
+});
+
+function resOnSearch(v) { resSearch = v.trim().toLowerCase(); resRender(); }
+
+async function startResearch(force = false) {
+  const rawInput = document.getElementById('resSymInput').value.trim();
+  const symbols  = rawInput
+    ? rawInput.split(/[\n,]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+    : [];
+
+  setLoading(true, true);
+  try {
+    const res  = await fetch('/api/research', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ symbols, force }),
+    });
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
+
+    resResults = data.results;
+    updateResStats(data);
+
+    document.getElementById('resStatsTop').style.display  = 'grid';
+    document.getElementById('resFilterBar').style.display = 'flex';
+    document.getElementById('refreshBtn').style.display   = '';
+    document.querySelectorAll('[data-rtab]').forEach(t => t.classList.remove('active'));
+    document.querySelector('[data-rtab="all"]').classList.add('active');
+    resActiveTab = 'all';
+    resRender();
+  } catch (err) {
+    document.getElementById('resCardsArea').innerHTML = '<div class="error-msg">Error: ' + err.message + '</div>';
+  } finally {
+    setLoading(false, true);
+  }
+}
+
+function updateResStats(d) {
+  document.getElementById('rTotal').textContent     = d.total;
+  document.getElementById('rAGrade').textContent    = d.a_grade;
+  document.getElementById('rCatalysts').textContent = d.has_catalysts;
+  document.getElementById('rLaunches').textContent  = d.product_launches;
+  document.getElementById('rTime').textContent      = d.timestamp;
+  document.getElementById('resCacheTag').style.display = d.from_cache ? 'inline-block' : 'none';
+}
+
+function resFiltered() {
+  let list = resResults.filter(r => !resDismissSet.has(r.symbol));
+  switch (resActiveTab) {
+    case 'agrade':   list = list.filter(r => ['A+','A'].includes(r.grade)); break;
+    case 'catalyst': list = list.filter(r => r.catalysts && r.catalysts.length > 0); break;
+    case 'launch':   list = list.filter(r => r.catalysts && r.catalysts.includes('launch')); break;
+    case 'earnings': list = list.filter(r => r.earn_score >= 60); break;
+  }
+  if (resMinScore > 0)  list = list.filter(r => r.overall_score >= resMinScore);
+  if (resSearch) list = list.filter(r =>
+    r.symbol.toLowerCase().includes(resSearch) ||
+    (r.name   || '').toLowerCase().includes(resSearch) ||
+    (r.sector || '').toLowerCase().includes(resSearch)
+  );
+  return list;
+}
+
+function resRender() {
+  const wrap  = document.getElementById('resCardsArea');
+  const key   = document.getElementById('resSortSel').value;
+  const list  = [...resFiltered()].sort((a, b) => (b[key] || 0) - (a[key] || 0));
+
+  if (!list.length) {
+    wrap.innerHTML = '<div class="empty-msg">No companies match the current filters.</div>';
+    return;
+  }
+  wrap.innerHTML = '<div class="research-grid">' + list.map(buildResCard).join('') + '</div>';
+}
+
+// ── Catalyst emoji map ─────────────────────────────────────────────────────
+const CAT_META = {
+  launch:  { emoji: '🚀', label: 'Product Launch',      cls: 'cat-launch'  },
+  partner: { emoji: '🤝', label: 'Partnership',         cls: 'cat-partner' },
+  upgrade: { emoji: '⬆',  label: 'Analyst Upgrade',     cls: 'cat-upgrade' },
+  approv:  { emoji: '✅', label: 'Regulatory Approval', cls: 'cat-approv'  },
+  ma:      { emoji: '🏢', label: 'Acquisition / M&A',   cls: 'cat-ma'      },
+};
+const NEWS_TC_META = {
+  launch:  { emoji: '🚀', cls: 'ni-launch'  },
+  partner: { emoji: '🤝', cls: 'ni-partner' },
+  upgrade: { emoji: '⬆',  cls: 'ni-upgrade' },
+  approv:  { emoji: '✅', cls: 'ni-approv'  },
+  ma:      { emoji: '🏢', cls: 'ni-ma'      },
+  earn:    { emoji: '📊', cls: 'ni-earn'    },
+  news:    { emoji: '📰', cls: 'ni-news'    },
+};
+
+function barCls(s) { return s >= 70 ? 'high' : s >= 45 ? 'mid' : 'low'; }
+
+function buildResCard(r) {
+  const pill = d => {
+    const icon = d.s === 'good' ? '✓' : d.s === 'bad' ? '✗' : '~';
+    return '<span class="dp ' + d.s + '"><span class="dp-k">' + d.k + '</span> <span class="dp-v">' + d.v + '</span> <span class="dp-i">' + icon + '</span></span>';
+  };
+
+  const newsItem = n => {
+    const m = NEWS_TC_META[n.tc] || NEWS_TC_META.news;
+    return '<div class="ni"><span class="ni-tag ' + m.cls + '">' + m.emoji + ' ' + n.tag + '</span>' +
+      '<a href="' + n.url + '" target="_blank" rel="noopener" class="ni-title">' + n.title + '</a>' +
+      '<span class="ni-age">' + n.age + '</span></div>';
+  };
+
+  const catalystHtml = (r.catalysts || []).map(c => {
+    const m = CAT_META[c];
+    return m ? '<span class="cat-chip ' + m.cls + '">' + m.emoji + ' ' + m.label + '</span>' : '';
+  }).join('');
+
+  const tvLink  = 'https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(r.symbol);
+  const yfLink  = 'https://finance.yahoo.com/quote/' + r.symbol;
+
+  return '<div class="research-card" id="rc_' + r.symbol + '">' +
+
+    '<div class="rc-header">' +
+      '<div class="rc-grade ' + r.grade_cls + '">' + r.grade + '</div>' +
+      '<div class="rc-info">' +
+        '<div class="rc-sym-row"><span class="rc-sym">' + r.symbol + '</span><span class="rc-name">' + r.name + '</span></div>' +
+        '<div class="rc-meta">' +
+          '<span>$' + r.price + '</span><span class="dot">·</span>' +
+          '<span>' + r.market_cap + '</span>' +
+          (r.pe_ratio ? '<span class="dot">·</span><span>P/E: ' + r.pe_ratio + '</span>' : '') +
+          (r.div_yield ? '<span class="dot">·</span><span>Div: ' + r.div_yield + '%</span>' : '') +
+        '</div>' +
+        '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
+          '<span class="sector-tag">' + (r.sector || '') + '</span>' +
+          (r.industry ? '<span class="industry-tag">' + r.industry + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="rc-overall">' +
+        '<div class="rc-overall-num">' + r.overall_score + '</div>' +
+        '<div class="rc-overall-label">Overall</div>' +
+        '<div class="score-bar-track" style="width:80px"><div class="score-bar-fill ' + barCls(r.overall_score) + '" style="width:' + r.overall_score + '%"></div></div>' +
+      '</div>' +
+    '</div>' +
+
+    (catalystHtml ? '<div class="rc-catalysts">' + catalystHtml + '</div>' : '') +
+
+    '<div class="rc-section">' +
+      '<div class="rc-sec-header"><span class="rc-sec-title">💰 Financial Health</span><span class="rc-sec-score ' + barCls(r.fin_score) + '">' + r.fin_score + '</span></div>' +
+      '<div class="score-bar-track sm-bar"><div class="score-bar-fill ' + barCls(r.fin_score) + '" style="width:' + r.fin_score + '%"></div></div>' +
+      '<div class="rc-pills">' + (r.fin_det || []).map(pill).join('') + '</div>' +
+    '</div>' +
+
+    '<div class="rc-section">' +
+      '<div class="rc-sec-header"><span class="rc-sec-title">📈 Earnings Quality</span><span class="rc-sec-score ' + barCls(r.earn_score) + '">' + r.earn_score + '</span></div>' +
+      '<div class="score-bar-track sm-bar"><div class="score-bar-fill ' + barCls(r.earn_score) + '" style="width:' + r.earn_score + '%"></div></div>' +
+      '<div class="rc-pills">' + (r.earn_det || []).map(pill).join('') + '</div>' +
+      (r.next_earn ? '<div class="rc-next-earn">📅 Next Earnings: ' + r.next_earn + '</div>' : '') +
+    '</div>' +
+
+    '<div class="rc-section">' +
+      '<div class="rc-sec-header"><span class="rc-sec-title">📰 News & Catalysts</span><span class="rc-sec-score ' + barCls(r.news_score) + '">' + r.news_score + '</span></div>' +
+      '<div class="score-bar-track sm-bar"><div class="score-bar-fill ' + barCls(r.news_score) + '" style="width:' + r.news_score + '%"></div></div>' +
+      '<div class="rc-news">' + ((r.news_items || []).length ? r.news_items.map(newsItem).join('') : '<div class="no-news">No recent news found</div>') + '</div>' +
+    '</div>' +
+
+    '<div class="rc-footer">' +
+      '<a href="' + tvLink + '" target="_blank" rel="noopener" class="rc-link-btn">📊 TradingView</a>' +
+      '<a href="' + yfLink + '" target="_blank" rel="noopener" class="rc-link-btn">💹 Yahoo Finance</a>' +
+      '<button class="rc-dismiss" onclick="ressDismiss(\'' + r.symbol + '\')">✕</button>' +
+    '</div>' +
+
+  '</div>';
+}
+
+function ressDismiss(symbol) {
+  resDismissSet.add(symbol);
+  const el = document.getElementById('rc_' + symbol);
+  if (el) { el.style.opacity = '0'; el.style.transform = 'scale(.95)'; el.style.transition = 'all .2s'; setTimeout(resRender, 200); }
 }

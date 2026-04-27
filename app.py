@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from tv_scanner import scan_tv
 from scanner import run_scan
 from stock_lists import get_symbols_by_sector, get_stock_info, SECTORS
+from fundamental import run_research, DEFAULT_RESEARCH
 
 app = Flask(__name__)
 CORS(app)
@@ -108,6 +109,41 @@ def scan():
         'from_cache':    False,
     }
 
+    _cset(cache_key, payload)
+    return jsonify(payload)
+
+
+@app.route('/api/research', methods=['POST'])
+def research():
+    data      = request.get_json(force=True)
+    custom    = data.get('symbols', [])
+    force     = data.get('force', False)
+    min_score = int(data.get('min_score', 0))
+
+    symbols = [s.strip().upper() for s in custom if s.strip()] if custom else DEFAULT_RESEARCH
+    symbols = symbols[:30]
+
+    cache_key = 'research|' + ','.join(sorted(symbols))
+    if not force:
+        cached = _cget(cache_key)
+        if cached:
+            cached['from_cache'] = True
+            return jsonify(cached)
+
+    results = run_research(symbols)
+    if min_score > 0:
+        results = [r for r in results if r['overall_score'] >= min_score]
+
+    payload = {
+        'results':         results,
+        'total':           len(results),
+        'a_grade':         len([r for r in results if r['grade'] in ('A+', 'A')]),
+        'has_catalysts':   len([r for r in results if r['catalysts']]),
+        'product_launches':len([r for r in results if 'launch' in r['catalysts']]),
+        'earn_beats':      len([r for r in results if r['earn_score'] >= 60]),
+        'timestamp':       ny_time(),
+        'from_cache':      False,
+    }
     _cset(cache_key, payload)
     return jsonify(payload)
 
