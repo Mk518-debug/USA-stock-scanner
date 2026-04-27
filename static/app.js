@@ -90,8 +90,11 @@ async function startScan(force = false) {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ timeframe, min_score: minScore, sector, symbols, force }),
     });
-    if (!res.ok) throw new Error(`Server error ${res.status}`);
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch (_) { throw new Error('Server returned an invalid response. Try again.'); }
+    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
     allResults = data.results;
     updateStats(data);
     populateStockList(data.results);
@@ -429,11 +432,20 @@ async function startResearch(force = false) {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ symbols, force }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      const msg = data.error || ('Server error ' + res.status);
-      throw new Error(msg);
+
+    // Read as text first — server may return HTML on timeout/crash
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      throw new Error(
+        res.status === 504 || text.toLowerCase().includes('timeout')
+          ? 'Request timed out. Try fewer stocks (5–10) or click Refresh.'
+          : 'Server error — try fewer stocks or wait a moment and click Refresh.'
+      );
     }
+    if (!res.ok) throw new Error(data.error || ('Server error ' + res.status));
 
     resResults = data.results;
     updateResStats(data);

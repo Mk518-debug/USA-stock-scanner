@@ -8,12 +8,11 @@ import time
 import yfinance as yf
 from datetime import datetime, timezone
 
+# Default list kept at 10 so the initial research finishes in ~30-40 seconds.
+# Users can add more symbols manually — each extra stock adds ~3 seconds.
 DEFAULT_RESEARCH = [
-    'AAPL','MSFT','GOOGL','NVDA','AMZN','META',
-    'JPM','V','MA','GS',
-    'JNJ','UNH','LLY',
-    'HD','WMT','COST',
-    'TSLA','AVGO','CRM','AMD',
+    'AAPL','MSFT','NVDA','GOOGL','AMZN',
+    'JPM','V','JNJ','HD','TSLA',
 ]
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -60,10 +59,10 @@ _SESSION.headers.update({
 })
 
 
-def _fetch_info(symbol, max_retries=4):
-    """Fetch ticker.info with custom session + retry on rate-limit (429)."""
-    waits = [10, 20, 40, 60]          # progressive back-off in seconds
-    for attempt in range(max_retries):
+def _fetch_info(symbol, max_retries=2):
+    """Fetch ticker.info with retry on rate-limit. Max 2 retries (≤30 s extra per stock)."""
+    waits = [10, 20]
+    for attempt in range(max_retries + 1):
         try:
             ticker = yf.Ticker(symbol, session=_SESSION)
             info   = ticker.info or {}
@@ -72,18 +71,17 @@ def _fetch_info(symbol, max_retries=4):
                    or _safe(info.get('previousClose')))
             if price:
                 return ticker, info
-            return None, None          # unknown / bad symbol
+            return None, None
         except Exception as e:
             msg = str(e).lower()
-            if 'rate' in msg or 'too many' in msg or '429' in msg:
-                wait = waits[min(attempt, len(waits) - 1)]
-                print('  [rate limit] %s — waiting %ds (attempt %d/%d)'
+            if ('rate' in msg or 'too many' in msg or '429' in msg) and attempt < max_retries:
+                wait = waits[attempt]
+                print('  [rate limit] %s — retry in %ds (%d/%d)'
                       % (symbol, wait, attempt + 1, max_retries))
                 time.sleep(wait)
             else:
-                print('  [error] %s: %s' % (symbol, e))
+                print('  [skip] %s: %s' % (symbol, e))
                 return None, None
-    print('  [skipped] %s — still rate limited after %d attempts' % (symbol, max_retries))
     return None, None
 
 # ── Financial Health Score ─────────────────────────────────────────────────
@@ -307,7 +305,8 @@ def analyze_fundamental(symbol):
 
 
 def run_research(symbols):
-    """Sequential with 2-second gaps to avoid Yahoo Finance rate limits."""
+    """Sequential with 2 s gaps. Max 15 symbols to stay within server timeout."""
+    symbols = symbols[:15]
     results = []
     total   = len(symbols)
     for i, sym in enumerate(symbols):
@@ -316,6 +315,6 @@ def run_research(symbols):
         if res:
             results.append(res)
         if i < total - 1:
-            time.sleep(3)   # 3-second gap to stay under Yahoo Finance rate limits
+            time.sleep(2)
     results.sort(key=lambda x: x['overall_score'], reverse=True)
     return results
