@@ -38,28 +38,45 @@ def _safe(v, default=None):
     except Exception:
         return default
 
-def _fetch_info(symbol, max_retries=3):
-    """Fetch ticker.info with retry on rate-limit (429)."""
+import requests as _requests
+
+_SESSION = _requests.Session()
+_SESSION.headers.update({
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/124.0.0.0 Safari/537.36'
+    ),
+    'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Accept-Encoding': 'gzip, deflate, br',
+})
+
+
+def _fetch_info(symbol, max_retries=4):
+    """Fetch ticker.info with custom session + retry on rate-limit (429)."""
+    waits = [10, 20, 40, 60]          # progressive back-off in seconds
     for attempt in range(max_retries):
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, session=_SESSION)
             info   = ticker.info or {}
             price  = (_safe(info.get('currentPrice'))
                    or _safe(info.get('regularMarketPrice'))
                    or _safe(info.get('previousClose')))
             if price:
                 return ticker, info
-            # Empty info — probably bad symbol
-            return None, None
+            return None, None          # unknown / bad symbol
         except Exception as e:
             msg = str(e).lower()
             if 'rate' in msg or 'too many' in msg or '429' in msg:
-                wait = 8 * (attempt + 1)   # 8s, 16s, 24s
-                print('  [rate limit] %s — waiting %ds (attempt %d)' % (symbol, wait, attempt+1))
+                wait = waits[min(attempt, len(waits) - 1)]
+                print('  [rate limit] %s — waiting %ds (attempt %d/%d)'
+                      % (symbol, wait, attempt + 1, max_retries))
                 time.sleep(wait)
             else:
                 print('  [error] %s: %s' % (symbol, e))
                 return None, None
+    print('  [skipped] %s — still rate limited after %d attempts' % (symbol, max_retries))
     return None, None
 
 # ── Financial Health Score ─────────────────────────────────────────────────
@@ -292,6 +309,6 @@ def run_research(symbols):
         if res:
             results.append(res)
         if i < total - 1:
-            time.sleep(2)   # 2-second gap between stocks
+            time.sleep(3)   # 3-second gap to stay under Yahoo Finance rate limits
     results.sort(key=lambda x: x['overall_score'], reverse=True)
     return results
