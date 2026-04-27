@@ -1,84 +1,97 @@
 'use strict';
 
+// ── State ─────────────────────────────────────────────────────────────────
 let allResults  = [];
 let activeTab   = 'all';
-let sortKey     = 'score';
-let sortAsc     = false;
+let scanType    = 'comprehensive';
 let lastTF      = '1d';
+let searchQuery = '';
+let watchedSet  = new Set();
+let dismissSet  = new Set();
 
-// ── Clock & market status ─────────────────────────────────────────────────
+// ── Clock ─────────────────────────────────────────────────────────────────
 function updateClock() {
   const fmt = (o) => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', ...o }).format(new Date());
   document.getElementById('nyTime').textContent =
-    `NY: ${fmt({ weekday:'short', month:'short', day:'numeric' })}, ${fmt({ hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true })}`;
+    `NY: ${fmt({weekday:'short',month:'short',day:'numeric'})}, ${fmt({hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})}`;
 
-  const h   = parseInt(fmt({ hour: 'numeric', hour12: false }));
-  const m   = parseInt(fmt({ minute: 'numeric' }));
-  const day = fmt({ weekday: 'short' });
+  const h   = parseInt(fmt({ hour:'numeric', hour12:false }));
+  const m   = parseInt(fmt({ minute:'numeric' }));
+  const day = fmt({ weekday:'short' });
   const el  = document.getElementById('marketStatus');
-
-  const wknd = ['Sat','Sun'].includes(day);
-  if (!wknd && ((h === 9 && m >= 30) || (h > 9 && h < 16))) {
-    el.textContent = '● MARKET OPEN'; el.className = 'market-badge open';
-  } else if (!wknd && h >= 4 && (h < 9 || (h === 9 && m < 30))) {
-    el.textContent = '◑ PRE-MARKET';  el.className = 'market-badge pre';
-  } else if (!wknd && h >= 16 && h < 20) {
-    el.textContent = '◑ AFTER HOURS'; el.className = 'market-badge pre';
-  } else {
-    el.textContent = '● CLOSED · Last session data'; el.className = 'market-badge closed';
-  }
+  const wk  = ['Sat','Sun'].includes(day);
+  if      (!wk && ((h===9&&m>=30)||(h>9&&h<16))) { el.textContent='● MARKET OPEN'; el.className='market-badge open'; }
+  else if (!wk && h>=4 && (h<9||(h===9&&m<30)))  { el.textContent='◑ PRE-MARKET';  el.className='market-badge pre';  }
+  else if (!wk && h>=16 && h<20)                  { el.textContent='◑ AFTER HOURS'; el.className='market-badge pre';  }
+  else                                            { el.textContent='● CLOSED';      el.className='market-badge closed'; }
 }
 updateClock();
 setInterval(updateClock, 1000);
 
-// ── Timeframe buttons ─────────────────────────────────────────────────────
-document.querySelectorAll('.tf-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    lastTF = btn.dataset.tf;
+// ── Segment buttons ───────────────────────────────────────────────────────
+function wireSegs(groupId, onSelect) {
+  document.querySelectorAll(`#${groupId} .seg-btn`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll(`#${groupId} .seg-btn`).forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      onSelect(btn);
+    });
   });
-});
+}
+wireSegs('scanTypeGroup', btn => { scanType = btn.dataset.type; render(); });
+wireSegs('tfGroup',       btn => { lastTF   = btn.dataset.tf; });
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
-document.querySelectorAll('.tab').forEach(tab => {
+document.querySelectorAll('.ftab').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     activeTab = tab.dataset.tab;
     render();
   });
 });
 
+// ── Market / Custom switch ────────────────────────────────────────────────
+function switchMarket(mode) {
+  document.getElementById('mtAll').classList.toggle('active',    mode === 'all');
+  document.getElementById('mtCustom').classList.toggle('active', mode === 'custom');
+  document.getElementById('allPanel').style.display    = mode === 'all'    ? '' : 'none';
+  document.getElementById('customPanel').style.display = mode === 'custom' ? '' : 'none';
+}
+
+// ── Search ────────────────────────────────────────────────────────────────
+function onSearch(v) { searchQuery = v.trim().toLowerCase(); render(); }
+
 // ── Scan ──────────────────────────────────────────────────────────────────
 async function startScan(force = false) {
-  const timeframe = document.querySelector('.tf-btn.active').dataset.tf;
+  const timeframe = document.querySelector('#tfGroup .seg-btn.active').dataset.tf;
   const minScore  = parseInt(document.getElementById('minScore').value) || 40;
   const sector    = document.getElementById('sectorSel').value;
-  const symRaw    = document.getElementById('symInput').value.trim();
-  const symbols   = symRaw ? symRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
-  lastTF          = timeframe;
+  const isCustom  = document.getElementById('mtCustom').classList.contains('active');
+  const symRaw    = document.getElementById('symInput').value;
+  const symbols   = isCustom ? symRaw.split(/[\n,]+/).map(s=>s.trim().toUpperCase()).filter(Boolean) : [];
+  lastTF = timeframe;
 
   setLoading(true);
   try {
-    const res = await fetch('/api/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res  = await fetch('/api/scan', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ timeframe, min_score: minScore, sector, symbols, force }),
     });
     if (!res.ok) throw new Error(`Server error ${res.status}`);
     const data = await res.json();
-
     allResults = data.results;
     updateStats(data);
-    document.getElementById('statsBar').style.display = 'flex';
-    document.getElementById('tabBar').style.display   = 'flex';
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelector('.tab[data-tab="all"]').classList.add('active');
+    populateStockList(data.results);
+
+    document.getElementById('statsTop').style.display  = 'grid';
+    document.getElementById('filterBar').style.display = 'flex';
+    document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.ftab[data-tab="all"]').classList.add('active');
     activeTab = 'all';
     render();
   } catch (err) {
-    document.getElementById('resultsWrap').innerHTML = `<div class="error-msg">❌ ${err.message}</div>`;
+    document.getElementById('cardsArea').innerHTML = `<div class="error-msg">❌ ${err.message}</div>`;
   } finally {
     setLoading(false);
   }
@@ -87,231 +100,230 @@ async function startScan(force = false) {
 // ── Stats ─────────────────────────────────────────────────────────────────
 function updateStats(d) {
   document.getElementById('sAnalyzed').textContent = d.total_scanned;
-  document.getElementById('sFound').textContent    = d.total_found;
-  document.getElementById('sBull').textContent     = d.bullish_count;
-  document.getElementById('sBear').textContent     = d.bearish_count;
   document.getElementById('sStrong').textContent   = d.strong_count;
   document.getElementById('sTime').textContent     = d.timestamp;
-  document.getElementById('sDataAsOf').textContent = d.data_as_of || '—';
 
-  const srcBadge = document.getElementById('sourceBadge');
-  srcBadge.textContent  = d.source === 'TradingView' ? '📡 TradingView' : '📊 Yahoo Finance';
-  srcBadge.className    = 'source-badge ' + (d.source === 'TradingView' ? 'src-tv' : 'src-yf');
-  srcBadge.style.display = 'inline-flex';
+  const trend = d.bullish_count > d.bearish_count ? 'Bullish' : d.bearish_count > d.bullish_count ? 'Bearish' : 'Mixed';
+  const te = document.getElementById('sTrend');
+  te.textContent = (trend === 'Bullish' ? '▲ ' : trend === 'Bearish' ? '▼ ' : '● ') + trend;
+  te.className   = 'sb-trend ' + (trend === 'Bullish' ? 'bull' : trend === 'Bearish' ? 'bear' : '');
 
-  const ct = document.getElementById('cacheTag');
-  ct.style.display = d.from_cache ? 'inline-flex' : 'none';
+  document.getElementById('cacheTag').style.display = d.from_cache ? 'inline-block' : 'none';
 }
 
-// ── Filter & render ───────────────────────────────────────────────────────
-function filtered() {
+// ── Sidebar stock list ────────────────────────────────────────────────────
+function populateStockList(results) {
+  const wrap = document.getElementById('stockList');
+  document.getElementById('slCount').textContent = `(${results.length})`;
+  if (!results.length) { wrap.innerHTML = '<div class="sl-empty">No results</div>'; return; }
+  wrap.innerHTML = results.map(r => `
+    <div class="sl-item ${r.direction==='Bullish'?'bull':'bear'}" onclick="scrollToCard('${r.symbol}')">
+      <span class="sl-sym">${r.symbol}</span>
+      <span class="sl-name">${r.name||''}</span>
+      <span class="sl-score ${r.score>=70?'high':''}">${r.score}</span>
+    </div>`).join('');
+}
+
+function scrollToCard(symbol) {
+  const el = document.getElementById(`card_${symbol}`);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ── Filter & Render ───────────────────────────────────────────────────────
+function getFiltered() {
+  let list = allResults.filter(r => !dismissSet.has(r.symbol));
   switch (activeTab) {
-    case 'bullish': return allResults.filter(r => r.direction === 'Bullish');
-    case 'bearish': return allResults.filter(r => r.direction === 'Bearish');
-    case 'strong':  return allResults.filter(r => r.score >= 70);
-    default:        return allResults;
+    case 'bullish': list = list.filter(r => r.direction==='Bullish'); break;
+    case 'bearish': list = list.filter(r => r.direction==='Bearish'); break;
+    case 's80':     list = list.filter(r => r.score>=80); break;
+    case 'strong':  list = list.filter(r => ['Strong Buy','Buy'].includes(r.tv_rating)); break;
+    case 'open':    list = list.filter(r => watchedSet.has(r.symbol)); break;
   }
+  switch (scanType) {
+    case 'trend':    list = list.filter(r => r.ema_score>=70); break;
+    case 'reversal': list = list.filter(r => r.rsi<38||r.rsi>62); break;
+  }
+  if (searchQuery) list = list.filter(r => r.symbol.toLowerCase().includes(searchQuery) || (r.name||'').toLowerCase().includes(searchQuery));
+  return list;
 }
 
 function render() {
-  const rows = [...filtered()].sort((a, b) => {
-    const va = a[sortKey], vb = b[sortKey];
-    if (va === vb) return 0;
-    return (sortAsc ? 1 : -1) * (va < vb ? -1 : 1);
-  });
+  const wrap = document.getElementById('cardsArea');
+  const key  = document.getElementById('sortSel').value;
+  const list = [...getFiltered()].sort((a,b) => (b[key]||0) - (a[key]||0));
 
-  const wrap = document.getElementById('resultsWrap');
-  if (!rows.length) { wrap.innerHTML = '<div class="empty-msg">🔍 No results match the current filters.</div>'; return; }
+  if (!list.length) { wrap.innerHTML = '<div class="empty-msg">🔍 No results match your filters.</div>'; return; }
 
-  wrap.innerHTML = `
-    <div class="table-toolbar">
-      <span class="result-count">${rows.length} result${rows.length !== 1 ? 's' : ''}</span>
-      <button class="refresh-btn" onclick="startScan(true)">↺ Refresh</button>
-    </div>
-    <div class="table-scroll">
-    <table class="results-table">
-      <thead><tr>
-        <th>#</th>
-        <th class="sortable" onclick="setSort('symbol')">Symbol ${si('symbol')}</th>
-        <th class="sortable" onclick="setSort('score')">Score ${si('score')}</th>
-        <th>Direction</th>
-        <th>TV Rating</th>
-        <th class="sortable" onclick="setSort('change_pct')">Change ${si('change_pct')}</th>
-        <th class="sortable" onclick="setSort('rsi')">RSI ${si('rsi')}</th>
-        <th>MACD</th>
-        <th>EMA</th>
-        <th class="sortable" onclick="setSort('vol_ratio')">Vol ${si('vol_ratio')}</th>
-        <th class="sortable" onclick="setSort('price')">Price ${si('price')}</th>
-        <th>Sector</th>
-      </tr></thead>
-      <tbody>${rows.map(buildRow).join('')}</tbody>
-    </table>
-    </div>`;
+  // Watched cards float to top
+  const ordered = [...list.filter(r=>watchedSet.has(r.symbol)), ...list.filter(r=>!watchedSet.has(r.symbol))];
+  wrap.innerHTML = `<div class="cards-grid">${ordered.map(buildCard).join('')}</div>`;
 }
 
-const si = (key) => sortKey !== key ? '<span style="opacity:.3">↕</span>' : sortAsc ? '↑' : '↓';
+// ── Pattern Tags ──────────────────────────────────────────────────────────
+function getPatterns(r) {
+  const t = [];
+  if (r.vol_ratio >= 1.3) t.push({ label:`Vol +${Math.round((r.vol_ratio-1)*100)}%`, cls:'' });
+  if (r.ema_score >= 85)  t.push({ label:'EMA Aligned', cls:'green' });
+  if (r.ema200 && r.price>r.ema20 && r.ema20>r.ema50 && r.ema50>r.ema200) t.push({ label:'All EMAs Bull', cls:'green' });
+  if (r.ema200 && r.price<r.ema20 && r.ema20<r.ema50 && r.ema50<r.ema200) t.push({ label:'All EMAs Bear', cls:'red' });
+  if (r.macd > r.macd_signal && r.macd_score>=75) t.push({ label:'MACD Cross ▲', cls:'blue' });
+  if (r.macd < r.macd_signal && r.macd_score<=30) t.push({ label:'MACD Cross ▼', cls:'red' });
+  if (r.rsi < 30)  t.push({ label:'RSI Oversold',   cls:'red' });
+  if (r.rsi > 70)  t.push({ label:'RSI Overbought', cls:'' });
+  if (r.rsi>=50 && r.rsi<=65) t.push({ label:'RSI Bullish', cls:'green' });
+  if (r.rsi>=35 && r.rsi<50)  t.push({ label:'RSI Bearish', cls:'red' });
+  if (r.tv_rating==='Strong Buy')  t.push({ label:'TV: Strong Buy',  cls:'purple' });
+  if (r.tv_rating==='Strong Sell') t.push({ label:'TV: Strong Sell', cls:'red' });
+  if (r.score>=80) t.push({ label:'High Confidence', cls:'purple' });
+  return t;
+}
 
-function setSort(key) {
-  sortAsc = sortKey === key ? !sortAsc : (key === 'symbol');
-  sortKey = key;
+// ── Build Card ────────────────────────────────────────────────────────────
+function buildCard(r) {
+  const dc    = r.direction==='Bullish'?'bull':r.direction==='Bearish'?'bear':'neutral';
+  const chgCl = r.change_pct>0?'bull':r.change_pct<0?'bear':'';
+  const chgS  = r.change_pct>0?'+':'';
+  const isW   = watchedSet.has(r.symbol);
+  const mult  = r.direction==='Bullish'?1:-1;
+  const atr   = r.atr||0;
+  const t1    = atr ? (r.entry + mult*1.0*atr).toFixed(2) : '';
+  const t2    = atr ? (r.entry + mult*2.0*atr).toFixed(2) : '';
+  const t3    = atr ? (r.entry + mult*3.0*atr).toFixed(2) : '';
+  const stop  = atr ? (r.entry - mult*0.8*atr).toFixed(2) : '';
+  const dist  = t2  ? Math.abs(((parseFloat(t2)-r.entry)/r.entry)*100).toFixed(1) : '—';
+
+  const patterns = getPatterns(r);
+  const tvLink   = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.tv_symbol||r.symbol)}`;
+
+  return `
+<div class="stock-card ${dc}${isW?' watched':''}" id="card_${r.symbol}">
+  <div class="card-top">
+    <div class="card-score-col">
+      <div class="card-score ${dc}">${r.score}</div>
+      <div class="card-dot ${dc}"></div>
+    </div>
+    <div class="card-info-col">
+      <div class="card-badges">
+        <span class="scan-type-tag">${scanType.charAt(0).toUpperCase()+scanType.slice(1)}</span>
+        <span class="sector-tag">${r.sector||''}</span>
+        ${isW?'<span class="watched-chip">📌 Watching</span>':''}
+      </div>
+      <div class="card-sym-row">
+        <span class="card-sym">${r.symbol}</span>
+        <span class="card-status ${dc}"></span>
+        <span class="card-name">${r.name||''}</span>
+      </div>
+    </div>
+    <div class="card-top-right">
+      <span class="tv-badge ${r.tv_css||'tv-na'}">${r.tv_rating||'—'}</span>
+      <span class="change-pct ${chgCl}">${chgS}${r.change_pct}%</span>
+    </div>
+  </div>
+
+  <div class="card-sep"></div>
+
+  <div class="card-metrics">
+    <div class="cm">
+      <span class="cm-label">EMA 20</span>
+      <span class="cm-val ${r.price>r.ema20?'bull':'bear'}">${r.price>r.ema20?'↑ Above':'↓ Below'}</span>
+    </div>
+    <div class="cm">
+      <span class="cm-label">EMA 50</span>
+      <span class="cm-val ${r.ema20>r.ema50?'bull':'bear'}">${r.ema20>r.ema50?'↑ Bull':'↓ Bear'}</span>
+    </div>
+    <div class="cm">
+      <span class="cm-label">RSI</span>
+      <span class="cm-val ${r.rsi>60?'bull':r.rsi<40?'bear':''}">${r.rsi}</span>
+    </div>
+    <div class="cm">
+      <span class="cm-label">MACD</span>
+      <span class="cm-val ${r.macd>r.macd_signal?'bull':'bear'}">${r.macd>r.macd_signal?'↑ Bull':'↓ Bear'}</span>
+    </div>
+  </div>
+
+  <div class="card-price-row">
+    <span class="cp-label">Current Price:</span>
+    <span class="cp-val">$${r.price.toLocaleString()}</span>
+    <span class="cp-change ${chgCl}">${chgS}${r.change_pct}%</span>
+  </div>
+
+  <div class="card-targets">
+    <div class="ct-row">
+      <div class="ct-field">
+        <div class="ct-label">✓ Entry Price</div>
+        <input class="ct-input" id="en_${r.symbol}" value="${r.entry}">
+      </div>
+      <div class="ct-field">
+        <div class="ct-label red">● Stop Loss</div>
+        <input class="ct-input red-i" id="sl_${r.symbol}" value="${stop}" placeholder="—">
+      </div>
+      <button class="ct-calc-btn" onclick="calcTargets('${r.symbol}',${atr},'${r.direction}')">
+        Calculate ↗
+      </button>
+    </div>
+    <div class="ct-row">
+      <div class="ct-field">
+        <div class="ct-label green">🎯 Target 1</div>
+        <input class="ct-input green-i" id="t1_${r.symbol}" value="${t1}" placeholder="—" readonly>
+      </div>
+      <div class="ct-field">
+        <div class="ct-label green">🎯 Target 2</div>
+        <input class="ct-input green-i" id="t2_${r.symbol}" value="${t2}" placeholder="—" readonly>
+      </div>
+      <div class="ct-field">
+        <div class="ct-label green">🎯 Target 3</div>
+        <input class="ct-input green-i" id="t3_${r.symbol}" value="${t3}" placeholder="—" readonly>
+      </div>
+    </div>
+    <div class="ct-atr">ATR: $${r.atr} &nbsp;|&nbsp; R/R: 1:2 &nbsp;|&nbsp; Distance: ${dist}%</div>
+  </div>
+
+  <div class="card-patterns">
+    ${patterns.map(p=>`<span class="pattern-tag ${p.cls}">${p.label}</span>`).join('')}
+  </div>
+
+  <div class="card-footer">
+    <span class="cf-time">⏱ ${r.last_candle||'—'}</span>
+    <div class="cf-actions">
+      <a href="${tvLink}" target="_blank" rel="noopener" class="cf-btn chart-btn" title="Open chart in TradingView">📊 Chart</a>
+      <button class="cf-btn${isW?' watch-active':''}" onclick="toggleWatch('${r.symbol}')" title="Watch">
+        ${isW?'📌':'👁'} Watch
+      </button>
+      <button class="cf-btn danger" onclick="dismissCard('${r.symbol}')" title="Dismiss">✕</button>
+    </div>
+  </div>
+</div>`;
+}
+
+// ── Card Actions ──────────────────────────────────────────────────────────
+function calcTargets(symbol, atr, direction) {
+  const entry = parseFloat(document.getElementById(`en_${symbol}`)?.value);
+  if (!entry || !atr) return;
+  const m = direction === 'Bullish' ? 1 : -1;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v.toFixed(2); };
+  set(`sl_${symbol}`, entry - m * 0.8 * atr);
+  set(`t1_${symbol}`, entry + m * 1.0 * atr);
+  set(`t2_${symbol}`, entry + m * 2.0 * atr);
+  set(`t3_${symbol}`, entry + m * 3.0 * atr);
+
+  watchedSet.add(symbol);
+  document.getElementById(`card_${symbol}`)?.classList.add('watched');
+}
+
+function toggleWatch(symbol) {
+  watchedSet.has(symbol) ? watchedSet.delete(symbol) : watchedSet.add(symbol);
   render();
 }
 
-// ── Row ───────────────────────────────────────────────────────────────────
-function buildRow(r, i) {
-  const dc    = r.direction === 'Bullish' ? 'bullish' : r.direction === 'Bearish' ? 'bearish' : 'neutral';
-  const arrow = r.direction === 'Bullish' ? '▲' : r.direction === 'Bearish' ? '▼' : '●';
-  const sc    = r.score >= 80 ? 'score-fire' : r.score >= 65 ? 'score-high' : r.score >= 45 ? 'score-med' : 'score-low';
-  const chgCl = r.change_pct > 0 ? 'green' : r.change_pct < 0 ? 'red' : 'muted';
-  const chgSign = r.change_pct > 0 ? '+' : '';
-
-  const macdBull = r.macd > r.macd_signal;
-  const ema3 = r.ema200
-    ? (r.price > r.ema20 && r.ema20 > r.ema50 && r.ema50 > r.ema200 ? '<span class="green">▲▲▲</span>'
-     : r.price < r.ema20 && r.ema20 < r.ema50 && r.ema50 < r.ema200 ? '<span class="red">▼▼▼</span>'
-     : r.price > r.ema20 ? '<span class="green">▲</span>' : '<span class="red">▼</span>')
-    : (r.price > r.ema20 ? '<span class="green">▲▲</span>' : '<span class="red">▼▼</span>');
-
-  return `
-    <tr class="result-row" onclick="toggleCard(this,'${r.symbol}')">
-      <td class="rank">${i + 1}</td>
-      <td><div class="sym-cell">
-        <span class="sym">${r.symbol}</span>
-        <span class="sym-name">${r.name || ''}</span>
-      </div></td>
-      <td><span class="score-badge ${sc}">${r.score}</span></td>
-      <td><span class="dir ${dc}">${arrow} ${r.direction}</span></td>
-      <td><span class="tv-badge ${r.tv_css || 'tv-na'}">${r.tv_rating || '—'}</span></td>
-      <td><span class="${chgCl}">${chgSign}${r.change_pct}%</span></td>
-      <td class="${r.rsi > 70 ? 'green' : r.rsi < 30 ? 'red' : ''}">${r.rsi}</td>
-      <td><span class="${macdBull ? 'green' : 'red'}">${macdBull ? '▲ Bull' : '▼ Bear'}</span></td>
-      <td>${ema3}</td>
-      <td class="${r.vol_ratio >= 1.5 ? 'green' : 'muted'}">${r.vol_ratio}x</td>
-      <td>$${r.price.toLocaleString()}</td>
-      <td><span class="sec-tag">${r.sector || ''}</span></td>
-    </tr>
-    <tr class="card-row" id="card-${r.symbol}" style="display:none">
-      <td colspan="12">${buildCard(r)}</td>
-    </tr>`;
+function dismissCard(symbol) {
+  dismissSet.add(symbol);
+  const el = document.getElementById(`card_${symbol}`);
+  if (el) { el.style.opacity = '0'; el.style.transform = 'scale(.95)'; el.style.transition = 'all .2s'; setTimeout(() => render(), 200); }
 }
 
-// ── Card ──────────────────────────────────────────────────────────────────
-function buildCard(r) {
-  const dc   = r.direction === 'Bullish' ? 'bullish' : 'bearish';
-  const pct  = (v) => { const d = ((v - r.entry) / r.entry * 100).toFixed(2); return `<span class="${d >= 0 ? 'green' : 'red'}">(${d >= 0 ? '+' : ''}${d}%)</span>`; };
-  const bar  = (s) => `<div class="bar-fill ${s >= 60 ? 'green-bar' : s >= 40 ? '' : 'red-bar'}" style="width:${s}%"></div>`;
-  const chip = (lbl, val) => `<div class="ema-chip"><div class="ema-lbl">${lbl}</div><div class="ema-val ${r.price > val ? 'green' : 'red'}">$${val.toLocaleString()}</div></div>`;
-
-  const tvLink = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.tv_symbol || r.symbol)}`;
-  const chgSign = r.change_pct > 0 ? '+' : '';
-
-  return `
-    <div class="stock-card">
-      <div class="card-top">
-        <div>
-          <span class="card-sym">${r.symbol}</span>
-          <span class="card-name">${r.name}</span>
-          <br>
-          <span class="sec-tag" style="margin-top:6px;display:inline-block">${r.sector}</span>
-          ${r.last_candle ? `<span class="candle-chip">📅 ${r.last_candle}</span>` : ''}
-          <span class="change-chip ${r.change_pct >= 0 ? 'green' : 'red'}">${chgSign}${r.change_pct}% today</span>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
-          <div class="card-score-box">
-            <div class="big-score ${dc}">${r.score}</div>
-            <div class="score-label">${r.direction} Signal</div>
-          </div>
-          <span class="tv-badge-lg ${r.tv_css || 'tv-na'}">${r.tv_rating || '—'}</span>
-          <a href="${tvLink}" target="_blank" rel="noopener" class="tv-link-btn">📈 Open in TradingView ↗</a>
-        </div>
-      </div>
-
-      <div class="trade-grid">
-        <div class="trade-item"><div class="trade-label">Entry Price</div><div class="trade-val">$${r.entry}</div></div>
-        <div class="trade-item"><div class="trade-label">Target (2× ATR)</div><div class="trade-val ${dc}">$${r.target} ${r.target ? pct(r.target) : ''}</div></div>
-        <div class="trade-item"><div class="trade-label">Stop Loss (1× ATR)</div><div class="trade-val red">$${r.stop} ${r.stop ? pct(r.stop) : ''}</div></div>
-        <div class="trade-item"><div class="trade-label">ATR</div><div class="trade-val">$${r.atr}</div></div>
-        <div class="trade-item"><div class="trade-label">Risk / Reward</div><div class="trade-val">1 : ${r.rr}</div></div>
-        <div class="trade-item"><div class="trade-label">Volume</div><div class="trade-val ${r.vol_ratio >= 1.5 ? 'green' : ''}">${r.vol_ratio}× avg</div></div>
-      </div>
-
-      <div class="ind-bars">
-        <div class="ind-row"><div class="ind-name">EMA Trend</div><div class="bar-track">${bar(r.ema_score)}</div><div class="ind-val">${r.ema_score}</div></div>
-        <div class="ind-row"><div class="ind-name">MACD</div><div class="bar-track">${bar(r.macd_score)}</div><div class="ind-val">${r.macd_score}</div></div>
-        <div class="ind-row"><div class="ind-name">RSI (${r.rsi})</div><div class="bar-track"><div class="bar-fill" style="width:${r.rsi}%;background:${r.rsi>70?'#ff1744':r.rsi<30?'#ff6d00':'#448aff'}"></div></div><div class="ind-val">${r.rsi_score}</div></div>
-        <div class="ind-row"><div class="ind-name">Volume</div><div class="bar-track">${bar(r.vol_score)}</div><div class="ind-val">${r.vol_score}</div></div>
-      </div>
-
-      <div class="ema-row" style="margin-bottom:16px">
-        ${chip('Price', r.price)}
-        ${chip('EMA 20', r.ema20)}
-        ${chip('EMA 50', r.ema50)}
-        ${r.ema200 ? chip('EMA 200', r.ema200) : ''}
-      </div>
-
-      <!-- TradingView Chart (injected after render) -->
-      <div class="tv-chart-wrap" id="tv_wrap_${r.symbol}">
-        <div class="tv-chart-header">
-          <span>📊 TradingView Chart</span>
-          <button class="tv-load-btn" onclick="loadTVChart('${r.symbol}','${r.tv_symbol || r.symbol}','${lastTF}')">Load Chart</button>
-        </div>
-        <div id="tv_chart_${r.symbol}" class="tv-chart-container"></div>
-      </div>
-    </div>`;
-}
-
-// ── TradingView chart injection ───────────────────────────────────────────
-const _TV_INTERVALS = { '1d':'D', '4h':'240', '1h':'60', '15m':'15' };
-
-function loadTVChart(symbol, tvSymbol, timeframe) {
-  const container = document.getElementById(`tv_chart_${symbol}`);
-  const header    = container.previousElementSibling;
-  if (!container || container.childElementCount > 0) return;
-
-  container.style.height = '420px';
-  header.querySelector('.tv-load-btn').style.display = 'none';
-
-  const widget = document.createElement('div');
-  widget.className = 'tradingview-widget-container__widget';
-  widget.style.cssText = 'height:100%;width:100%';
-  container.appendChild(widget);
-
-  const script = document.createElement('script');
-  script.type  = 'text/javascript';
-  script.src   = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-  script.async = true;
-  script.textContent = JSON.stringify({
-    autosize:          true,
-    symbol:            tvSymbol,
-    interval:          _TV_INTERVALS[timeframe] || 'D',
-    timezone:          'America/New_York',
-    theme:             'dark',
-    style:             '1',
-    locale:            'en',
-    backgroundColor:   'rgba(13,13,26,0)',
-    gridColor:         'rgba(28,28,50,1)',
-    hide_top_toolbar:  false,
-    hide_legend:       false,
-    save_image:        false,
-    calendar:          false,
-    support_host:      'https://www.tradingview.com',
-  });
-  container.appendChild(script);
-}
-
-// ── Toggle card ───────────────────────────────────────────────────────────
-function toggleCard(row, symbol) {
-  const cardRow = document.getElementById(`card-${symbol}`);
-  const open    = cardRow.style.display !== 'none';
-
-  document.querySelectorAll('.card-row').forEach(r  => r.style.display = 'none');
-  document.querySelectorAll('.result-row').forEach(r => r.classList.remove('active'));
-
-  if (!open) {
-    cardRow.style.display = 'table-row';
-    row.classList.add('active');
-    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+function closeAllWatched() {
+  watchedSet.clear();
+  render();
 }
 
 // ── Loading ───────────────────────────────────────────────────────────────
@@ -319,10 +331,5 @@ function setLoading(on) {
   document.getElementById('loadingOverlay').style.display = on ? 'flex' : 'none';
   const btn = document.getElementById('scanBtn');
   btn.disabled = on;
-  document.getElementById('scanBtnText').textContent = on ? '⏳ SCANNING…' : '▶ START SCAN';
+  document.getElementById('scanBtnText').textContent = on ? '⏳ SCANNING…' : '🔍 START SCAN';
 }
-
-// ── Enter key ─────────────────────────────────────────────────────────────
-['minScore', 'symInput'].forEach(id =>
-  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') startScan(); })
-);
