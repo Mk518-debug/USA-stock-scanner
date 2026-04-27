@@ -39,6 +39,9 @@
     <!-- ══ SCANNER PANEL ══ -->
     <div id="scannerPanel">
 
+      <!-- Sticky wrapper: stats + filter stay visible while scrolling -->
+      <div class="sticky-bars" id="scannerStickyBars">
+
       <!-- Stats Top Bar -->
       <div class="stats-top" id="statsTop" style="display:none">
         <div class="stats-box">
@@ -84,6 +87,8 @@
         </div>
       </div>
 
+      </div><!-- end .sticky-bars -->
+
       <!-- Scanner Cards Area -->
       <div class="cards-area" id="cardsArea">
         <div class="welcome" id="welcomeScreen">
@@ -106,6 +111,8 @@
 
     <!-- ══ RESEARCH PANEL ══ -->
     <div id="researchPanel" style="display:none">
+
+      <div class="sticky-bars" id="researchStickyBars">
 
       <!-- Research Stats Bar -->
       <div class="stats-top" id="resStatsTop" style="display:none">
@@ -151,6 +158,8 @@
           </select>
         </div>
       </div>
+
+      </div><!-- end .sticky-bars -->
 
       <!-- Research Cards Area -->
       <div class="cards-area" id="resCardsArea">
