@@ -450,6 +450,101 @@ body {
 }
 .refresh-btn:hover { color: var(--text); border-color: var(--blue); background: rgba(68,138,255,.08); }
 
+/* ── Table scroll wrapper ── */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ── TradingView Rating Badges ── */
+.tv-badge, .tv-badge-lg {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.tv-badge-lg { font-size: 0.8rem; padding: 5px 14px; border-radius: 12px; }
+
+.tv-strong-buy  { color: #00e676; background: rgba(0,230,118,.15); border: 1px solid rgba(0,230,118,.35); }
+.tv-buy         { color: #69f0ae; background: rgba(105,240,174,.12); border: 1px solid rgba(105,240,174,.25); }
+.tv-neutral     { color: var(--text2); background: rgba(80,80,128,.15); border: 1px solid var(--border2); }
+.tv-sell        { color: #ff6d6d; background: rgba(255,109,109,.12); border: 1px solid rgba(255,109,109,.25); }
+.tv-strong-sell { color: #ff1744; background: rgba(255,23,68,.15); border: 1px solid rgba(255,23,68,.35); }
+.tv-na          { color: var(--text3); background: transparent; border: 1px solid var(--border); }
+
+/* ── Source badge ── */
+.source-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+}
+.src-tv { color: #2196f3; background: rgba(33,150,243,.12); border: 1px solid rgba(33,150,243,.3); }
+.src-yf { color: #9c27b0; background: rgba(156,39,176,.12); border: 1px solid rgba(156,39,176,.3); }
+
+/* ── Change chip in card ── */
+.change-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 10px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.change-chip.green { background: rgba(0,230,118,.1); border: 1px solid rgba(0,230,118,.2); }
+.change-chip.red   { background: rgba(255,23,68,.1);  border: 1px solid rgba(255,23,68,.2); }
+
+/* ── TradingView Open button ── */
+.tv-link-btn {
+  display: inline-block;
+  background: rgba(33,150,243,.12);
+  border: 1px solid rgba(33,150,243,.3);
+  color: #2196f3;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all .15s;
+}
+.tv-link-btn:hover { background: rgba(33,150,243,.2); border-color: #2196f3; }
+
+/* ── TradingView Chart embed ── */
+.tv-chart-wrap {
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.tv-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text2);
+}
+.tv-load-btn {
+  background: rgba(33,150,243,.15);
+  border: 1px solid rgba(33,150,243,.3);
+  color: #2196f3;
+  padding: 4px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: all .15s;
+}
+.tv-load-btn:hover { background: rgba(33,150,243,.25); }
+.tv-chart-container {
+  height: 0;
+  background: var(--bg3);
+  transition: height .3s ease;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .ctrl-row    { gap: 10px; }
