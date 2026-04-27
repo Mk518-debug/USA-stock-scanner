@@ -97,8 +97,17 @@
   </div>
   <div class="stat-sep"></div>
   <div class="stat-item">
-    <span class="stat-label">Updated</span>
+    <span class="stat-label">Data As Of</span>
+    <span class="stat-val sm" id="sDataAsOf">—</span>
+  </div>
+  <div class="stat-sep"></div>
+  <div class="stat-item">
+    <span class="stat-label">Scanned At</span>
     <span class="stat-val sm" id="sTime">—</span>
+  </div>
+  <div class="stat-sep"></div>
+  <div class="stat-item">
+    <span id="cacheTag" class="cache-tag" style="display:none">⚡ Cached</span>
   </div>
 </div>
 
@@ -116,6 +125,7 @@
     <div class="welcome-icon">📈</div>
     <div class="welcome-title">USA Stock Market Scanner</div>
     <div class="welcome-desc">Select timeframe &amp; filters, then click <strong>START SCAN</strong></div>
+    <div class="welcome-note">📅 Works 24/7 — uses the latest available session data even when markets are closed</div>
     <div class="feature-row">
       <span class="feat">📊 EMA Trend</span>
       <span class="feat">⚡ MACD Signal</span>
@@ -131,8 +141,8 @@
   <div class="overlay-box">
     <div class="spinner"></div>
     <div class="overlay-title">Scanning US Markets…</div>
-    <div class="overlay-sub">Fetching &amp; analyzing real-time stock data</div>
-    <div class="overlay-note">⏱ May take 30–90 seconds</div>
+    <div class="overlay-sub">Fetching latest available data — works market open or closed</div>
+    <div class="overlay-note">⏱ May take 30–90 seconds on first scan · cached for 15 min</div>
   </div>
 </div>
 

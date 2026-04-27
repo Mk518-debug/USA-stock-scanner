@@ -5,9 +5,10 @@ let activeTab  = 'all';
 let sortKey    = 'score';
 let sortAsc    = false;
 
-// ── Clock ──────────────────────────────────────────────────────────────────
+// ── Clock & market status ─────────────────────────────────────────────────
 function updateClock() {
-  const fmt = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', ...opts }).format(new Date());
+  const fmt = (opts) =>
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', ...opts }).format(new Date());
 
   const time = fmt({ hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
   const date = fmt({ weekday: 'short', month: 'short', day: 'numeric' });
@@ -17,14 +18,28 @@ function updateClock() {
   const m   = parseInt(fmt({ minute: 'numeric' }));
   const day = fmt({ weekday: 'short' });
   const open = !['Sat', 'Sun'].includes(day) && ((h === 9 && m >= 30) || (h > 9 && h < 16));
+  const premarket  = !['Sat', 'Sun'].includes(day) && h >= 4  && (h < 9 || (h === 9 && m < 30));
+  const afterhours = !['Sat', 'Sun'].includes(day) && h >= 16 && h < 20;
+
   const el = document.getElementById('marketStatus');
-  el.textContent = open ? '● LIVE' : '● CLOSED';
-  el.className   = 'market-badge ' + (open ? 'open' : 'closed');
+  if (open) {
+    el.textContent = '● MARKET OPEN';
+    el.className   = 'market-badge open';
+  } else if (premarket) {
+    el.textContent = '◑ PRE-MARKET';
+    el.className   = 'market-badge pre';
+  } else if (afterhours) {
+    el.textContent = '◑ AFTER HOURS';
+    el.className   = 'market-badge pre';
+  } else {
+    el.textContent = '● CLOSED · Last session data';
+    el.className   = 'market-badge closed';
+  }
 }
 updateClock();
 setInterval(updateClock, 1000);
 
-// ── Timeframe buttons ──────────────────────────────────────────────────────
+// ── Timeframe buttons ─────────────────────────────────────────────────────
 document.querySelectorAll('.tf-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
@@ -32,7 +47,7 @@ document.querySelectorAll('.tf-btn').forEach(btn => {
   });
 });
 
-// ── Tabs ───────────────────────────────────────────────────────────────────
+// ── Tabs ──────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -42,8 +57,8 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
-// ── Scan ───────────────────────────────────────────────────────────────────
-async function startScan() {
+// ── Scan ──────────────────────────────────────────────────────────────────
+async function startScan(force = false) {
   const timeframe = document.querySelector('.tf-btn.active').dataset.tf;
   const minScore  = parseInt(document.getElementById('minScore').value) || 40;
   const sector    = document.getElementById('sectorSel').value;
@@ -54,9 +69,9 @@ async function startScan() {
 
   try {
     const res = await fetch('/api/scan', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timeframe, min_score: minScore, sector, symbols }),
+      body:    JSON.stringify({ timeframe, min_score: minScore, sector, symbols, force }),
     });
     if (!res.ok) throw new Error(`Server error ${res.status}`);
     const data = await res.json();
@@ -78,17 +93,21 @@ async function startScan() {
   }
 }
 
-// ── Stats ──────────────────────────────────────────────────────────────────
+// ── Stats ─────────────────────────────────────────────────────────────────
 function updateStats(d) {
-  document.getElementById('sAnalyzed').textContent = d.total_scanned;
-  document.getElementById('sFound').textContent    = d.total_found;
-  document.getElementById('sBull').textContent     = d.bullish_count;
-  document.getElementById('sBear').textContent     = d.bearish_count;
-  document.getElementById('sStrong').textContent   = d.strong_count;
-  document.getElementById('sTime').textContent     = d.timestamp;
+  document.getElementById('sAnalyzed').textContent  = d.total_scanned;
+  document.getElementById('sFound').textContent     = d.total_found;
+  document.getElementById('sBull').textContent      = d.bullish_count;
+  document.getElementById('sBear').textContent      = d.bearish_count;
+  document.getElementById('sStrong').textContent    = d.strong_count;
+  document.getElementById('sTime').textContent      = d.timestamp;
+  document.getElementById('sDataAsOf').textContent  = d.data_as_of || '—';
+
+  const cacheTag = document.getElementById('cacheTag');
+  cacheTag.style.display = d.from_cache ? 'inline-flex' : 'none';
 }
 
-// ── Filter & Render ────────────────────────────────────────────────────────
+// ── Filter & Render ───────────────────────────────────────────────────────
 function filtered() {
   switch (activeTab) {
     case 'bullish': return allResults.filter(r => r.direction === 'Bullish');
@@ -112,6 +131,10 @@ function render() {
   }
 
   wrap.innerHTML = `
+    <div class="table-toolbar">
+      <span class="result-count">${rows.length} result${rows.length !== 1 ? 's' : ''}</span>
+      <button class="refresh-btn" onclick="startScan(true)" title="Force refresh — bypass cache">↺ Refresh</button>
+    </div>
     <table class="results-table">
       <thead><tr>
         <th>#</th>
@@ -123,6 +146,7 @@ function render() {
         <th>EMA Trend</th>
         <th class="sortable" onclick="setSort('vol_ratio')">Volume ${sortIcon('vol_ratio')}</th>
         <th class="sortable" onclick="setSort('price')">Price ${sortIcon('price')}</th>
+        <th>Data As Of</th>
         <th>Sector</th>
       </tr></thead>
       <tbody id="tBody">${rows.map(buildRow).join('')}</tbody>
@@ -140,11 +164,11 @@ function setSort(key) {
   render();
 }
 
-// ── Row ────────────────────────────────────────────────────────────────────
+// ── Row ───────────────────────────────────────────────────────────────────
 function buildRow(r, i) {
-  const dc = r.direction === 'Bullish' ? 'bullish' : r.direction === 'Bearish' ? 'bearish' : 'neutral';
+  const dc    = r.direction === 'Bullish' ? 'bullish' : r.direction === 'Bearish' ? 'bearish' : 'neutral';
   const arrow = r.direction === 'Bullish' ? '▲' : r.direction === 'Bearish' ? '▼' : '●';
-  const sc = r.score >= 80 ? 'score-fire' : r.score >= 65 ? 'score-high' : r.score >= 45 ? 'score-med' : 'score-low';
+  const sc    = r.score >= 80 ? 'score-fire' : r.score >= 65 ? 'score-high' : r.score >= 45 ? 'score-med' : 'score-low';
 
   const macdBull = r.macd > r.macd_signal;
   const ema3 = r.ema200
@@ -166,14 +190,15 @@ function buildRow(r, i) {
       <td>${ema3}</td>
       <td class="${r.vol_ratio >= 1.5 ? 'green' : 'muted'}">${r.vol_ratio}x</td>
       <td>$${r.price.toLocaleString()}</td>
+      <td><span class="candle-date">${r.last_candle || '—'}</span></td>
       <td><span class="sec-tag">${r.sector || ''}</span></td>
     </tr>
     <tr class="card-row" id="card-${r.symbol}" style="display:none">
-      <td colspan="10">${buildCard(r)}</td>
+      <td colspan="11">${buildCard(r)}</td>
     </tr>`;
 }
 
-// ── Card ───────────────────────────────────────────────────────────────────
+// ── Card ──────────────────────────────────────────────────────────────────
 function buildCard(r) {
   const dc = r.direction === 'Bullish' ? 'bullish' : 'bearish';
   const pct = (v) => {
@@ -197,7 +222,9 @@ function buildCard(r) {
         <div>
           <span class="card-sym">${r.symbol}</span>
           <span class="card-name">${r.name}</span>
-          <br><span class="sec-tag" style="margin-top:6px;display:inline-block">${r.sector}</span>
+          <br>
+          <span class="sec-tag" style="margin-top:6px;display:inline-block">${r.sector}</span>
+          ${r.last_candle ? `<span class="candle-chip">📅 Data as of ${r.last_candle}</span>` : ''}
         </div>
         <div class="card-score-box">
           <div class="big-score ${dc}">${r.score}</div>
@@ -245,7 +272,7 @@ function buildCard(r) {
         </div>
         <div class="ind-row">
           <div class="ind-name">RSI (${r.rsi})</div>
-          <div class="bar-track"><div class="bar-fill" style="width:${r.rsi}%;background:${r.rsi>70?'#ff1744':r.rsi<30?'#ff6d00':'#448aff'}"></div></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${r.rsi}%;background:${r.rsi > 70 ? '#ff1744' : r.rsi < 30 ? '#ff6d00' : '#448aff'}"></div></div>
           <div class="ind-val">${r.rsi_score}</div>
         </div>
         <div class="ind-row">
@@ -264,12 +291,12 @@ function buildCard(r) {
     </div>`;
 }
 
-// ── Toggle expanded card ───────────────────────────────────────────────────
+// ── Toggle expanded card ──────────────────────────────────────────────────
 function toggleCard(row, symbol) {
   const cardRow = document.getElementById(`card-${symbol}`);
   const open    = cardRow.style.display !== 'none';
 
-  document.querySelectorAll('.card-row').forEach(r => r.style.display = 'none');
+  document.querySelectorAll('.card-row').forEach(r  => r.style.display = 'none');
   document.querySelectorAll('.result-row').forEach(r => r.classList.remove('active'));
 
   if (!open) {
@@ -279,7 +306,7 @@ function toggleCard(row, symbol) {
   }
 }
 
-// ── Loading ────────────────────────────────────────────────────────────────
+// ── Loading ───────────────────────────────────────────────────────────────
 function setLoading(on) {
   document.getElementById('loadingOverlay').style.display = on ? 'flex' : 'none';
   const btn = document.getElementById('scanBtn');
@@ -287,7 +314,7 @@ function setLoading(on) {
   document.getElementById('scanBtnText').textContent = on ? '⏳ SCANNING…' : '▶ START SCAN';
 }
 
-// ── Enter key on inputs ────────────────────────────────────────────────────
+// ── Enter key on inputs ───────────────────────────────────────────────────
 ['minScore', 'symInput'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', e => {
     if (e.key === 'Enter') startScan();

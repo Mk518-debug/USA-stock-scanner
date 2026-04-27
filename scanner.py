@@ -1,3 +1,4 @@
+import time
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -37,7 +38,7 @@ def _atr(high, low, close, period=14):
 
 _INTERVAL_PARAMS = {
     '1d':  {'period': '1y',  'interval': '1d'},
-    '4h':  {'period': '60d', 'interval': '1h'},   # resampled
+    '4h':  {'period': '60d', 'interval': '1h'},
     '1h':  {'period': '60d', 'interval': '1h'},
     '15m': {'period': '30d', 'interval': '15m'},
 }
@@ -65,9 +66,30 @@ def _fetch(symbol, timeframe):
     return df
 
 
+def _fetch_with_retry(symbol, timeframe, retries=2):
+    for attempt in range(retries):
+        try:
+            df = _fetch(symbol, timeframe)
+            if df is not None and len(df) > 0:
+                return df
+        except Exception:
+            if attempt < retries - 1:
+                time.sleep(0.5)
+    return None
+
+
+def _fmt_candle_date(ts, timeframe):
+    try:
+        if timeframe == '1d':
+            return pd.Timestamp(ts).strftime('%b %d, %Y')
+        return pd.Timestamp(ts).strftime('%b %d, %Y %H:%M')
+    except Exception:
+        return str(ts)
+
+
 def analyze(symbol, timeframe='1d'):
     try:
-        df = _fetch(symbol, timeframe)
+        df = _fetch_with_retry(symbol, timeframe)
         if df is None or len(df) < 30:
             return None
 
@@ -76,13 +98,15 @@ def analyze(symbol, timeframe='1d'):
         low   = df['Low'].squeeze()
         vol   = df['Volume'].squeeze()
 
-        rsi_s              = _rsi(close)
+        last_candle = _fmt_candle_date(df.index[-1], timeframe)
+
+        rsi_s               = _rsi(close)
         macd_l, sig_l, hist = _macd(close)
-        ema20              = _ema(close, 20)
-        ema50              = _ema(close, 50)
-        ema200             = _ema(close, 200) if len(df) >= 200 else None
-        vol_ma             = vol.rolling(20).mean()
-        atr_s              = _atr(high, low, close)
+        ema20               = _ema(close, 20)
+        ema50               = _ema(close, 50)
+        ema200              = _ema(close, 200) if len(df) >= 200 else None
+        vol_ma              = vol.rolling(20).mean()
+        atr_s               = _atr(high, low, close)
 
         c    = float(close.iloc[-1])
         r    = float(rsi_s.iloc[-1])
@@ -180,6 +204,7 @@ def analyze(symbol, timeframe='1d'):
             'macd_score':  round(macd_sc, 1),
             'rsi_score':   round(rsi_sc, 1),
             'vol_score':   round(vol_sc, 1),
+            'last_candle': last_candle,
         }
     except Exception as e:
         print(f"  [!] {symbol}: {e}")

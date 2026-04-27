@@ -388,6 +388,68 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #3a3a60; }
 
+/* ── Pre/After-hours badge ── */
+.market-badge.pre { color: var(--yellow); background: rgba(255,215,64,.12); border: 1px solid rgba(255,215,64,.25); }
+
+/* ── Welcome note ── */
+.welcome-note {
+  font-size: 0.78rem;
+  color: var(--blue);
+  background: rgba(68,138,255,.1);
+  border: 1px solid rgba(68,138,255,.2);
+  padding: 7px 16px;
+  border-radius: 20px;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+/* ── Data-as-of column ── */
+.candle-date { font-size: 0.72rem; color: var(--text2); white-space: nowrap; }
+
+/* ── Candle chip in card ── */
+.candle-chip {
+  font-size: 0.72rem;
+  color: var(--blue);
+  background: rgba(68,138,255,.1);
+  border: 1px solid rgba(68,138,255,.2);
+  padding: 3px 10px;
+  border-radius: 10px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* ── Cache tag ── */
+.cache-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--yellow);
+  background: rgba(255,215,64,.1);
+  border: 1px solid rgba(255,215,64,.25);
+  padding: 3px 10px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+/* ── Table toolbar ── */
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 10px;
+}
+.result-count { font-size: 0.8rem; color: var(--text2); }
+.refresh-btn {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  padding: 5px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all .15s;
+}
+.refresh-btn:hover { color: var(--text); border-color: var(--blue); background: rgba(68,138,255,.08); }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .ctrl-row    { gap: 10px; }
