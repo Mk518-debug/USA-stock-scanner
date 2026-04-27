@@ -429,8 +429,11 @@ async function startResearch(force = false) {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ symbols, force }),
     });
-    if (!res.ok) throw new Error('Server error ' + res.status);
     const data = await res.json();
+    if (!res.ok) {
+      const msg = data.error || ('Server error ' + res.status);
+      throw new Error(msg);
+    }
 
     resResults = data.results;
     updateResStats(data);

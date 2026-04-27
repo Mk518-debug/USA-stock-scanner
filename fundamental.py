@@ -32,11 +32,18 @@ def _fmt_cap(mc):
     return '$%.0fM' % (mc / 1e6)
 
 def _safe(v, default=None):
+    """Return float(v), converting NaN/inf/None to default."""
     try:
         f = float(v)
-        return default if (f != f) else f
+        if f != f or f == float('inf') or f == float('-inf'):
+            return default
+        return f
     except Exception:
         return default
+
+def _n(v, default=0, decimals=2):
+    """JSON-safe rounded number: NaN/None/inf → default."""
+    return round(_safe(v, default), decimals)
 
 import requests as _requests
 
@@ -277,11 +284,11 @@ def analyze_fundamental(symbol):
             'name':          info.get('longName') or info.get('shortName') or symbol,
             'sector':        info.get('sector', 'Unknown'),
             'industry':      info.get('industry', ''),
-            'price':         round(float(price), 2),
-            'market_cap':    _fmt_cap(info.get('marketCap')),
-            'pe_ratio':      round(float(info.get('trailingPE') or 0), 1),
-            'forward_pe':    round(float(info.get('forwardPE')  or 0), 1),
-            'div_yield':     round(float(info.get('dividendYield') or 0) * 100, 2),
+            'price':         _n(price, 0, 2),
+            'market_cap':    _fmt_cap(_safe(info.get('marketCap'))),
+            'pe_ratio':      _n(info.get('trailingPE'),   0, 1),
+            'forward_pe':    _n(info.get('forwardPE'),    0, 1),
+            'div_yield':     _n((_safe(info.get('dividendYield'), 0)) * 100, 0, 2),
             'overall_score': overall,
             'grade':         grade,
             'grade_cls':     grade_cls,

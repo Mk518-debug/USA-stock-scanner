@@ -1,5 +1,6 @@
 import os
 import time
+import traceback
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
@@ -131,19 +132,24 @@ def research():
             entry['data']['from_cache'] = True
             return jsonify(entry['data'])
 
-    results = run_research(symbols)
+    try:
+        results = run_research(symbols)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'results': [], 'total': 0}), 500
+
     if min_score > 0:
         results = [r for r in results if r['overall_score'] >= min_score]
 
     payload = {
-        'results':         results,
-        'total':           len(results),
-        'a_grade':         len([r for r in results if r['grade'] in ('A+', 'A')]),
-        'has_catalysts':   len([r for r in results if r['catalysts']]),
-        'product_launches':len([r for r in results if 'launch' in r['catalysts']]),
-        'earn_beats':      len([r for r in results if r['earn_score'] >= 60]),
-        'timestamp':       ny_time(),
-        'from_cache':      False,
+        'results':          results,
+        'total':            len(results),
+        'a_grade':          len([r for r in results if r['grade'] in ('A+', 'A')]),
+        'has_catalysts':    len([r for r in results if r.get('catalysts')]),
+        'product_launches': len([r for r in results if 'launch' in (r.get('catalysts') or [])]),
+        'earn_beats':       len([r for r in results if r.get('earn_score', 0) >= 60]),
+        'timestamp':        ny_time(),
+        'from_cache':       False,
     }
     _cset(cache_key, payload)
     return jsonify(payload)
