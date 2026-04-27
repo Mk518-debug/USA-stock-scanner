@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USA Stock Scanner</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="header">
+  <div class="header-brand">
+    <span class="flag">🇺🇸</span>
+    <div>
+      <h1 class="brand-title">USA Stock Scanner</h1>
+      <div class="brand-sub">Real-time Technical Analysis</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="marketStatus" class="market-badge closed">● CLOSED</span>
+    <span id="nyTime" class="ny-time">Loading…</span>
+  </div>
+</header>
+
+<!-- ── CONTROLS ── -->
+<div class="controls-panel">
+  <div class="ctrl-row">
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Timeframe</div>
+      <div class="tf-group" id="tfGroup">
+        <button class="tf-btn active" data-tf="1d">1D</button>
+        <button class="tf-btn" data-tf="4h">4H</button>
+        <button class="tf-btn" data-tf="1h">1H</button>
+        <button class="tf-btn" data-tf="15m">15m</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label class="ctrl-label" for="minScore">Min Score</label>
+      <input id="minScore" class="ctrl-input w80" type="number" value="40" min="0" max="100" step="5">
+    </div>
+
+    <div class="ctrl-group">
+      <label class="ctrl-label" for="sectorSel">Sector</label>
+      <select id="sectorSel" class="ctrl-select">
+        <option value="all">All Sectors</option>
+        <option value="Technology">Technology</option>
+        <option value="Finance">Finance</option>
+        <option value="Healthcare">Healthcare</option>
+        <option value="Energy">Energy</option>
+        <option value="Consumer">Consumer</option>
+        <option value="Industrial">Industrial</option>
+        <option value="Communication">Communication</option>
+        <option value="Materials">Materials</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group ctrl-grow">
+      <label class="ctrl-label" for="symInput">Custom Symbols</label>
+      <input id="symInput" class="ctrl-input" type="text" placeholder="e.g. AAPL, MSFT, NVDA">
+    </div>
+
+    <button id="scanBtn" class="scan-btn" onclick="startScan()">
+      <span id="scanBtnText">▶ START SCAN</span>
+    </button>
+
+  </div>
+</div>
+
+<!-- ── STATS BAR ── -->
+<div id="statsBar" class="stats-bar" style="display:none">
+  <div class="stat-item">
+    <span class="stat-label">Analyzed</span>
+    <span class="stat-val" id="sAnalyzed">0</span>
+  </div>
+  <div class="stat-sep"></div>
+  <div class="stat-item">
+    <span class="stat-label">Found</span>
+    <span class="stat-val" id="sFound">0</span>
+  </div>
+  <div class="stat-sep"></div>
+  <div class="stat-item">
+    <span class="stat-label">▲ Bullish</span>
+    <span class="stat-val green" id="sBull">0</span>
+  </div>
+  <div class="stat-sep"></div>
+  <div class="stat-item">
+    <span class="stat-label">▼ Bearish</span>
+    <span class="stat-val red" id="sBear">0</span>
+  </div>
+  <div class="stat-sep"></div>
+  <div class="stat-item">
+    <span class="stat-label">🔥 Strong 70+</span>
+    <span class="stat-val fire" id="sStrong">0</span>
+  </div>
+  <div class="stat-sep"></div>
+  <div class="stat-item">
+    <span class="stat-label">Updated</span>
+    <span class="stat-val sm" id="sTime">—</span>
+  </div>
+</div>
+
+<!-- ── TABS ── -->
+<div id="tabBar" class="tab-bar" style="display:none">
+  <button class="tab active" data-tab="all">All</button>
+  <button class="tab" data-tab="bullish">▲ Bullish</button>
+  <button class="tab" data-tab="bearish">▼ Bearish</button>
+  <button class="tab" data-tab="strong">⚡ Score 70+</button>
+</div>
+
+<!-- ── RESULTS ── -->
+<div id="resultsWrap">
+  <div class="welcome">
+    <div class="welcome-icon">📈</div>
+    <div class="welcome-title">USA Stock Market Scanner</div>
+    <div class="welcome-desc">Select timeframe &amp; filters, then click <strong>START SCAN</strong></div>
+    <div class="feature-row">
+      <span class="feat">📊 EMA Trend</span>
+      <span class="feat">⚡ MACD Signal</span>
+      <span class="feat">📈 RSI Momentum</span>
+      <span class="feat">💹 Volume Spike</span>
+      <span class="feat">🎯 Entry &amp; Targets</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── LOADING OVERLAY ── -->
+<div id="loadingOverlay" class="overlay" style="display:none">
+  <div class="overlay-box">
+    <div class="spinner"></div>
+    <div class="overlay-title">Scanning US Markets…</div>
+    <div class="overlay-sub">Fetching &amp; analyzing real-time stock data</div>
+    <div class="overlay-note">⏱ May take 30–90 seconds</div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
