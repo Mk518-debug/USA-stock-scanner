@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 from tv_scanner import scan_tv
 from scanner import run_scan
 from stock_lists import get_symbols_by_sector, get_stock_info, SECTORS
-from fundamental import run_research, DEFAULT_RESEARCH
+from news_fetch import fetch_news
 
 app = Flask(__name__)
 CORS(app)
@@ -122,48 +122,38 @@ def scan():
     return jsonify(payload)
 
 
-@app.route('/api/research', methods=['POST'])
-def research():
-    data      = request.get_json(force=True) or {}
-    custom    = data.get('symbols', [])
-    force     = data.get('force', False)
-    min_score = int(data.get('min_score', 0) or 0)
+@app.route('/api/news', methods=['POST'])
+def news():
+    data    = request.get_json(force=True) or {}
+    symbols = [s.strip().upper() for s in data.get('symbols', []) if s.strip()]
+    force   = data.get('force', False)
 
-    symbols = [s.strip().upper() for s in custom if s.strip()] if custom else DEFAULT_RESEARCH
-    symbols = symbols[:30]
+    if not symbols:
+        return jsonify({'news': [], 'total': 0, 'timestamp': ny_time()})
 
-    cache_key = 'research|' + ','.join(sorted(symbols))
+    cache_key = 'news|' + ','.join(sorted(symbols[:20]))
     if not force:
-        # Use 1-hour TTL for research (fundamental data changes slowly)
         entry = _cache.get(cache_key)
-        if entry and (time.time() - entry['ts'] < 3600):
+        if entry and (time.time() - entry['ts'] < 300):   # 5-min cache
             entry['data']['from_cache'] = True
             return jsonify(entry['data'])
 
     try:
-        results, warning = run_research(symbols)
+        items = fetch_news(symbols)
     except Exception as e:
         traceback.print_exc()
-        return jsonify({'error': str(e), 'results': [], 'total': 0,
-                        'warning': 'error'}), 500
-
-    if min_score > 0:
-        results = [r for r in results if r['overall_score'] >= min_score]
+        return jsonify({'error': str(e), 'news': [], 'total': 0}), 500
 
     payload = {
-        'results':          results,
-        'total':            len(results),
-        'a_grade':          len([r for r in results if r['grade'] in ('A+', 'A')]),
-        'has_catalysts':    len([r for r in results if r.get('catalysts')]),
-        'product_launches': len([r for r in results if 'launch' in (r.get('catalysts') or [])]),
-        'earn_beats':       len([r for r in results if r.get('earn_score', 0) >= 60]),
-        'timestamp':        ny_time(),
-        'warning':          warning,
-        'from_cache':       False,
+        'news':       items,
+        'total':      len(items),
+        'launches':   len([n for n in items if n['cat_cls'] == 'launch']),
+        'earnings':   len([n for n in items if n['cat_cls'] == 'earn']),
+        'upgrades':   len([n for n in items if n['cat_cls'] == 'upgrade']),
+        'timestamp':  ny_time(),
+        'from_cache': False,
     }
-    # Only cache successful full results
-    if warning == 'ok':
-        _cset(cache_key, payload)
+    _cset(cache_key, payload)
     return jsonify(payload)
 
 

@@ -59,7 +59,15 @@ document.querySelectorAll('.ftab').forEach(tab => {
     document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     activeTab = tab.dataset.tab;
-    render();
+    if (activeTab === 'news') {
+      document.getElementById('cardsArea').style.display = 'none';
+      document.getElementById('newsArea').style.display  = '';
+      fetchNews();
+    } else {
+      document.getElementById('newsArea').style.display  = 'none';
+      document.getElementById('cardsArea').style.display = '';
+      render();
+    }
   });
 });
 
@@ -342,289 +350,120 @@ function closeAllWatched() {
 }
 
 // ── Loading ───────────────────────────────────────────────────────────────
-function setLoading(on, isResearch = false) {
+function setLoading(on) {
   document.getElementById('loadingOverlay').style.display = on ? 'flex' : 'none';
-  const btn  = document.getElementById('mainBtn');
-  btn.disabled = on;
-  if (isResearch) {
-    document.getElementById('mainBtnText').textContent    = on ? '⏳ RESEARCHING…' : '🔬 RUN RESEARCH';
-    document.getElementById('overlayTitle').textContent   = 'Running Deep Research…';
-    document.getElementById('overlaySub').textContent     = 'Fetching financials, earnings & news for each company';
-    document.getElementById('overlayNote').textContent    = '⏱ ~2 sec per company · allow 30–60 sec total';
-  } else {
-    document.getElementById('mainBtnText').textContent    = on ? '⏳ SCANNING…' : '🔍 START SCAN';
-    document.getElementById('overlayTitle').textContent   = 'Scanning US Markets…';
-    document.getElementById('overlaySub').textContent     = 'Fetching real-time data · works market open or closed';
-    document.getElementById('overlayNote').textContent    = '⏱ ~3 sec via TradingView · ~60 sec via Yahoo Finance';
+  const btn = document.getElementById('scanBtn');
+  if (btn) btn.disabled = on;
+  const txt = document.getElementById('scanBtnText');
+  if (txt) txt.textContent = on ? '⏳ SCANNING…' : '🔍 START SCAN';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  NEWS SECTION
+// ══════════════════════════════════════════════════════════════════════════
+let allNews    = [];
+let newsCat    = 'all';
+let newsSymFilter = 'all';
+let newsFetched = false;
+
+// Wire news category chips
+document.querySelectorAll('.n-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.n-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    newsCat = chip.dataset.ncat;
+    renderNews();
+  });
+});
+
+async function fetchNews(force = false) {
+  const symbols = allResults.slice(0, 20).map(r => r.symbol);
+  const feed    = document.getElementById('newsFeed');
+
+  if (!symbols.length) {
+    feed.innerHTML = `
+      <div class="news-empty">
+        <div class="news-empty-icon">📊</div>
+        <div class="news-empty-title">Run a scan first</div>
+        <div class="news-empty-desc">The News tab shows headlines for the stocks currently in your scanner results.</div>
+      </div>`;
+    return;
   }
-}
 
-// ══════════════════════════════════════════════════════════════════════════
-//  MODE SWITCHING
-// ══════════════════════════════════════════════════════════════════════════
-let currentMode = 'scanner';
+  if (!force && newsFetched && allNews.length) { renderNews(); return; }
 
-function switchMode(mode) {
-  currentMode = mode;
-  const isRes = mode === 'research';
+  feed.innerHTML = '<div class="news-loading"><div class="spinner" style="margin:0 auto 12px"></div>Fetching news…</div>';
 
-  document.getElementById('modeScanner').classList.toggle('active',  !isRes);
-  document.getElementById('modeResearch').classList.toggle('active',  isRes);
-
-  document.getElementById('scannerPanel').style.display  = isRes ? 'none' : 'flex';
-  document.getElementById('scannerPanel').style.flexDirection = 'column';
-  document.getElementById('researchPanel').style.display = isRes ? 'flex' : 'none';
-  document.getElementById('researchPanel').style.flexDirection = 'column';
-
-  document.getElementById('scannerSide').style.display  = isRes ? 'none' : '';
-  document.getElementById('researchSide').style.display = isRes ? '' : 'none';
-
-  document.getElementById('mainBtnText').textContent = isRes ? '🔬 RUN RESEARCH' : '🔍 START SCAN';
-  document.getElementById('refreshBtn').style.display = 'none';
-}
-
-function onMainBtn(force = false) {
-  if (currentMode === 'research') startResearch(force);
-  else startScan(force);
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-//  DEEP RESEARCH
-// ══════════════════════════════════════════════════════════════════════════
-let resResults   = [];
-let resActiveTab = 'all';
-let resSearch    = '';
-let resMinScore  = 0;
-let resDismissSet = new Set();
-
-// Segment group for min grade
-document.querySelectorAll('#resGradeGroup .seg-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#resGradeGroup .seg-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    resMinScore = parseInt(btn.dataset.grade) || 0;
-    resRender();
-  });
-});
-
-// Research tab buttons
-document.querySelectorAll('[data-rtab]').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('[data-rtab]').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    resActiveTab = tab.dataset.rtab;
-    resRender();
-  });
-});
-
-function resOnSearch(v) { resSearch = v.trim().toLowerCase(); resRender(); }
-
-async function startResearch(force = false) {
-  const rawInput = document.getElementById('resSymInput').value.trim();
-  const symbols  = rawInput
-    ? rawInput.split(/[\n,]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
-    : [];
-
-  setLoading(true, true);
   try {
-    const res  = await fetch('/api/research', {
+    const res  = await fetch('/api/news', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ symbols, force }),
     });
-
-    // Read as text first — server may return HTML on timeout/crash
     const text = await res.text();
     let data;
-    try {
-      data = JSON.parse(text);
-    } catch (_) {
-      throw new Error(
-        res.status === 504 || text.toLowerCase().includes('timeout')
-          ? 'Request timed out. Try fewer stocks (5–10) or click Refresh.'
-          : 'Server error — try fewer stocks or wait a moment and click Refresh.'
-      );
-    }
-    if (!res.ok) throw new Error(data.error || ('Server error ' + res.status));
+    try { data = JSON.parse(text); }
+    catch (_) { throw new Error('Server error — try again.'); }
 
-    resResults = data.results || [];
+    allNews     = data.news || [];
+    newsFetched = true;
 
-    // Rate-limit early exit — show helpful message, don't render empty table
-    if (data.warning === 'rate_limited') {
-      document.getElementById('resCardsArea').innerHTML = `
-        <div class="empty-msg" style="max-width:480px;margin:40px auto;text-align:center">
-          <div style="font-size:2.5rem;margin-bottom:12px">⏳</div>
-          <div style="font-size:1rem;font-weight:700;color:var(--yellow);margin-bottom:8px">
-            Yahoo Finance is Rate Limiting This Server
-          </div>
-          <div style="font-size:0.85rem;color:var(--text2);line-height:1.6;margin-bottom:16px">
-            Too many requests were made recently.<br>
-            Please <strong>wait 2–3 minutes</strong> then click <strong>↺ Refresh</strong>.
-          </div>
-          <button onclick="startResearch(true)" style="background:rgba(68,138,255,.15);border:1px solid rgba(68,138,255,.3);color:var(--blue);padding:8px 20px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600">
-            ↺ Try Again
-          </button>
-        </div>`;
-      document.getElementById('resStatsTop').style.display  = 'none';
-      document.getElementById('resFilterBar').style.display = 'none';
-      setLoading(false, true);
-      return;
-    }
+    // Populate stock filter dropdown
+    const sel = document.getElementById('newsStockFilter');
+    sel.innerHTML = '<option value="all">All Stocks</option>' +
+      symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+    newsSymFilter = 'all';
 
-    updateResStats(data);
-
-    document.getElementById('resStatsTop').style.display  = 'grid';
-    document.getElementById('resFilterBar').style.display = 'flex';
-    document.getElementById('refreshBtn').style.display   = '';
-    document.querySelectorAll('[data-rtab]').forEach(t => t.classList.remove('active'));
-    document.querySelector('[data-rtab="all"]').classList.add('active');
-    resActiveTab = 'all';
-    resRender();
+    renderNews();
   } catch (err) {
-    document.getElementById('resCardsArea').innerHTML = '<div class="error-msg">Error: ' + err.message + '</div>';
-  } finally {
-    setLoading(false, true);
+    feed.innerHTML = `<div class="empty-msg">❌ ${err.message}</div>`;
   }
 }
 
-function updateResStats(d) {
-  document.getElementById('rTotal').textContent     = d.total;
-  document.getElementById('rAGrade').textContent    = d.a_grade;
-  document.getElementById('rCatalysts').textContent = d.has_catalysts;
-  document.getElementById('rLaunches').textContent  = d.product_launches;
-  document.getElementById('rTime').textContent      = d.timestamp;
-  document.getElementById('resCacheTag').style.display = d.from_cache ? 'inline-block' : 'none';
-}
+function renderNews() {
+  const feed = document.getElementById('newsFeed');
+  newsSymFilter = document.getElementById('newsStockFilter')?.value || 'all';
 
-function resFiltered() {
-  let list = resResults.filter(r => !resDismissSet.has(r.symbol));
-  switch (resActiveTab) {
-    case 'agrade':   list = list.filter(r => ['A+','A'].includes(r.grade)); break;
-    case 'catalyst': list = list.filter(r => r.catalysts && r.catalysts.length > 0); break;
-    case 'launch':   list = list.filter(r => r.catalysts && r.catalysts.includes('launch')); break;
-    case 'earnings': list = list.filter(r => r.earn_score >= 60); break;
-  }
-  if (resMinScore > 0)  list = list.filter(r => r.overall_score >= resMinScore);
-  if (resSearch) list = list.filter(r =>
-    r.symbol.toLowerCase().includes(resSearch) ||
-    (r.name   || '').toLowerCase().includes(resSearch) ||
-    (r.sector || '').toLowerCase().includes(resSearch)
-  );
-  return list;
-}
+  let list = allNews;
+  if (newsSymFilter !== 'all') list = list.filter(n => n.symbol === newsSymFilter);
+  if (newsCat       !== 'all') list = list.filter(n => n.cat_cls === newsCat);
 
-function resRender() {
-  const wrap  = document.getElementById('resCardsArea');
-  const key   = document.getElementById('resSortSel').value;
-  const list  = [...resFiltered()].sort((a, b) => (b[key] || 0) - (a[key] || 0));
+  document.getElementById('newsCount').textContent = list.length + ' articles';
 
   if (!list.length) {
-    const hint = resResults.length === 0
-      ? 'No data was retrieved. Yahoo Finance may be rate-limiting — wait 2 min and click ↺ Refresh.'
-      : 'No companies match the active filter. Try "All" tab or lower the min grade.';
-    wrap.innerHTML = '<div class="empty-msg">' + hint + '</div>';
+    feed.innerHTML = `
+      <div class="news-empty">
+        <div class="news-empty-icon">📭</div>
+        <div class="news-empty-title">No news found</div>
+        <div class="news-empty-desc">Try "All" category or a different stock filter.</div>
+      </div>`;
     return;
   }
-  wrap.innerHTML = '<div class="research-grid">' + list.map(buildResCard).join('') + '</div>';
-}
 
-// ── Catalyst emoji map ─────────────────────────────────────────────────────
-const CAT_META = {
-  launch:  { emoji: '🚀', label: 'Product Launch',      cls: 'cat-launch'  },
-  partner: { emoji: '🤝', label: 'Partnership',         cls: 'cat-partner' },
-  upgrade: { emoji: '⬆',  label: 'Analyst Upgrade',     cls: 'cat-upgrade' },
-  approv:  { emoji: '✅', label: 'Regulatory Approval', cls: 'cat-approv'  },
-  ma:      { emoji: '🏢', label: 'Acquisition / M&A',   cls: 'cat-ma'      },
-};
-const NEWS_TC_META = {
-  launch:  { emoji: '🚀', cls: 'ni-launch'  },
-  partner: { emoji: '🤝', cls: 'ni-partner' },
-  upgrade: { emoji: '⬆',  cls: 'ni-upgrade' },
-  approv:  { emoji: '✅', cls: 'ni-approv'  },
-  ma:      { emoji: '🏢', cls: 'ni-ma'      },
-  earn:    { emoji: '📊', cls: 'ni-earn'    },
-  news:    { emoji: '📰', cls: 'ni-news'    },
-};
-
-function barCls(s) { return s >= 70 ? 'high' : s >= 45 ? 'mid' : 'low'; }
-
-function buildResCard(r) {
-  const pill = d => {
-    const icon = d.s === 'good' ? '✓' : d.s === 'bad' ? '✗' : '~';
-    return '<span class="dp ' + d.s + '"><span class="dp-k">' + d.k + '</span> <span class="dp-v">' + d.v + '</span> <span class="dp-i">' + icon + '</span></span>';
+  const CAT_EMOJI = {
+    earn:'📊', launch:'🚀', upgrade:'⬆', deal:'🤝',
+    approv:'✅', ma:'🏢', div:'💰', news:'📰',
   };
 
-  const newsItem = n => {
-    const m = NEWS_TC_META[n.tc] || NEWS_TC_META.news;
-    return '<div class="ni"><span class="ni-tag ' + m.cls + '">' + m.emoji + ' ' + n.tag + '</span>' +
-      '<a href="' + n.url + '" target="_blank" rel="noopener" class="ni-title">' + n.title + '</a>' +
-      '<span class="ni-age">' + n.age + '</span></div>';
-  };
-
-  const catalystHtml = (r.catalysts || []).map(c => {
-    const m = CAT_META[c];
-    return m ? '<span class="cat-chip ' + m.cls + '">' + m.emoji + ' ' + m.label + '</span>' : '';
+  feed.innerHTML = list.map(n => {
+    const emoji = CAT_EMOJI[n.cat_cls] || '📰';
+    const sent  = n.sentiment === 'pos' ? 'pos' : n.sentiment === 'neg' ? 'neg' : '';
+    const thumb = n.thumb
+      ? `<img class="ni-thumb" src="${n.thumb}" alt="" onerror="this.style.display='none'">`
+      : '';
+    return `
+      <div class="news-item ${sent}">
+        <div class="ni-sym">${n.symbol}</div>
+        <div class="ni-body">
+          <div class="ni-meta">
+            <span class="ni-cat-tag nc-${n.cat_cls}">${emoji} ${n.cat}</span>
+            <span class="ni-sep">·</span>
+            <span class="ni-source">${n.source}</span>
+            <span class="ni-time">${n.time_str}</span>
+          </div>
+          <a href="${n.url}" target="_blank" rel="noopener" class="ni-title">${n.title}</a>
+        </div>
+        ${thumb}
+      </div>`;
   }).join('');
-
-  const tvLink  = 'https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(r.symbol);
-  const yfLink  = 'https://finance.yahoo.com/quote/' + r.symbol;
-
-  return '<div class="research-card" id="rc_' + r.symbol + '">' +
-
-    '<div class="rc-header">' +
-      '<div class="rc-grade ' + r.grade_cls + '">' + r.grade + '</div>' +
-      '<div class="rc-info">' +
-        '<div class="rc-sym-row"><span class="rc-sym">' + r.symbol + '</span><span class="rc-name">' + r.name + '</span></div>' +
-        '<div class="rc-meta">' +
-          '<span>$' + r.price + '</span><span class="dot">·</span>' +
-          '<span>' + r.market_cap + '</span>' +
-          (r.pe_ratio ? '<span class="dot">·</span><span>P/E: ' + r.pe_ratio + '</span>' : '') +
-          (r.div_yield ? '<span class="dot">·</span><span>Div: ' + r.div_yield + '%</span>' : '') +
-        '</div>' +
-        '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
-          '<span class="sector-tag">' + (r.sector || '') + '</span>' +
-          (r.industry ? '<span class="industry-tag">' + r.industry + '</span>' : '') +
-        '</div>' +
-      '</div>' +
-      '<div class="rc-overall">' +
-        '<div class="rc-overall-num">' + r.overall_score + '</div>' +
-        '<div class="rc-overall-label">Overall</div>' +
-        '<div class="score-bar-track" style="width:80px"><div class="score-bar-fill ' + barCls(r.overall_score) + '" style="width:' + r.overall_score + '%"></div></div>' +
-      '</div>' +
-    '</div>' +
-
-    (catalystHtml ? '<div class="rc-catalysts">' + catalystHtml + '</div>' : '') +
-
-    '<div class="rc-section">' +
-      '<div class="rc-sec-header"><span class="rc-sec-title">💰 Financial Health</span><span class="rc-sec-score ' + barCls(r.fin_score) + '">' + r.fin_score + '</span></div>' +
-      '<div class="score-bar-track sm-bar"><div class="score-bar-fill ' + barCls(r.fin_score) + '" style="width:' + r.fin_score + '%"></div></div>' +
-      '<div class="rc-pills">' + (r.fin_det || []).map(pill).join('') + '</div>' +
-    '</div>' +
-
-    '<div class="rc-section">' +
-      '<div class="rc-sec-header"><span class="rc-sec-title">📈 Earnings Quality</span><span class="rc-sec-score ' + barCls(r.earn_score) + '">' + r.earn_score + '</span></div>' +
-      '<div class="score-bar-track sm-bar"><div class="score-bar-fill ' + barCls(r.earn_score) + '" style="width:' + r.earn_score + '%"></div></div>' +
-      '<div class="rc-pills">' + (r.earn_det || []).map(pill).join('') + '</div>' +
-      (r.next_earn ? '<div class="rc-next-earn">📅 Next Earnings: ' + r.next_earn + '</div>' : '') +
-    '</div>' +
-
-    '<div class="rc-section">' +
-      '<div class="rc-sec-header"><span class="rc-sec-title">📰 News & Catalysts</span><span class="rc-sec-score ' + barCls(r.news_score) + '">' + r.news_score + '</span></div>' +
-      '<div class="score-bar-track sm-bar"><div class="score-bar-fill ' + barCls(r.news_score) + '" style="width:' + r.news_score + '%"></div></div>' +
-      '<div class="rc-news">' + ((r.news_items || []).length ? r.news_items.map(newsItem).join('') : '<div class="no-news">No recent news found</div>') + '</div>' +
-    '</div>' +
-
-    '<div class="rc-footer">' +
-      '<a href="' + tvLink + '" target="_blank" rel="noopener" class="rc-link-btn">📊 TradingView</a>' +
-      '<a href="' + yfLink + '" target="_blank" rel="noopener" class="rc-link-btn">💹 Yahoo Finance</a>' +
-      '<button class="rc-dismiss" onclick="ressDismiss(\'' + r.symbol + '\')">✕</button>' +
-    '</div>' +
-
-  '</div>';
-}
-
-function ressDismiss(symbol) {
-  resDismissSet.add(symbol);
-  const el = document.getElementById('rc_' + symbol);
-  if (el) { el.style.opacity = '0'; el.style.transform = 'scale(.95)'; el.style.transition = 'all .2s'; setTimeout(resRender, 200); }
 }
