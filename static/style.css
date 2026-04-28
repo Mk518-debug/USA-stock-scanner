@@ -119,6 +119,9 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 .sb-trend      { font-size: 1.1rem; font-weight: 800; }
 .sb-trend.bull { color: var(--green); }
 .sb-trend.bear { color: var(--red); }
+.sb-regime     { font-size: 0.82rem; font-weight: 700; }
+.sb-regime.bull { color: var(--green); }
+.sb-regime.bear { color: var(--red); }
 
 .cache-tag     { font-size: 0.65rem; font-weight: 700; color: var(--yellow); background: rgba(255,215,64,.1); border: 1px solid rgba(255,215,64,.25); padding: 2px 8px; border-radius: 10px; margin-top: 4px; display: inline-block; width: fit-content; }
 

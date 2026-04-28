@@ -151,10 +151,20 @@ function updateStats(d) {
   document.getElementById('sStrong').textContent   = d.strong_count;
   document.getElementById('sTime').textContent     = d.timestamp;
 
-  const trend = d.bullish_count > d.bearish_count ? 'Bullish' : d.bearish_count > d.bullish_count ? 'Bearish' : 'Mixed';
+  const trend = d.bullish_count > d.bearish_count ? 'Bullish'
+              : d.bearish_count > d.bullish_count  ? 'Bearish' : 'Mixed';
   const te = document.getElementById('sTrend');
   te.textContent = (trend === 'Bullish' ? '▲ ' : trend === 'Bearish' ? '▼ ' : '● ') + trend;
   te.className   = 'sb-trend ' + (trend === 'Bullish' ? 'bull' : trend === 'Bearish' ? 'bear' : '');
+
+  // Market Regime badge
+  const re = document.getElementById('sRegime');
+  if (re && d.regime_score !== undefined) {
+    const rs = d.regime_score;
+    const rl = d.regime_label || (rs >= 60 ? 'Risk-On' : rs <= 40 ? 'Risk-Off' : 'Neutral');
+    re.textContent = (rs >= 60 ? '🟢 ' : rs <= 40 ? '🔴 ' : '🟡 ') + rl + ' (' + rs + ')';
+    re.className   = 'sb-regime ' + (rs >= 60 ? 'bull' : rs <= 40 ? 'bear' : '');
+  }
 
   document.getElementById('cacheTag').style.display = d.from_cache ? 'inline-block' : 'none';
 }
@@ -210,20 +220,87 @@ function render() {
 // ── Pattern Tags ──────────────────────────────────────────────────────────
 function getPatterns(r) {
   const t = [];
+
+  // ── Backend-supplied patterns (candlesticks + breakout) ──
+  if (r.patterns && r.patterns.length) {
+    r.patterns.forEach(p => {
+      const cls = (p==='Bull Engulfing'||p==='Hammer'||p==='20D Breakout') ? 'green'
+                : (p==='Bear Engulfing'||p==='Shooting Star') ? 'red' : '';
+      t.push({ label: p, cls });
+    });
+  }
+
+  // ── Divergence (from backend) ──
+  if (r.divergence === 'bullish')  t.push({ label:'RSI Div ▲', cls:'green' });
+  if (r.divergence === 'bearish')  t.push({ label:'RSI Div ▼', cls:'red' });
+
+  // ── MTF alignment ──
+  if (r.mtf_align ===  1) t.push({ label:'HTF Aligned ▲', cls:'green' });
+  if (r.mtf_align === -1) t.push({ label:'HTF Conflict ▼', cls:'red' });
+
+  // ── Relative strength vs SPY ──
+  if (r.rs_20 !== undefined && r.rs_20 !== null) {
+    if (r.rs_20 >= 5)  t.push({ label:'RS+ vs SPY', cls:'green' });
+    if (r.rs_20 <= -5) t.push({ label:'RS- vs SPY', cls:'red' });
+  }
+
+  // ── Volume spike ──
   if (r.vol_ratio >= 1.3) t.push({ label:`Vol +${Math.round((r.vol_ratio-1)*100)}%`, cls:'' });
-  if (r.ema_score >= 85)  t.push({ label:'EMA Aligned', cls:'green' });
-  if (r.ema200 && r.price>r.ema20 && r.ema20>r.ema50 && r.ema50>r.ema200) t.push({ label:'All EMAs Bull', cls:'green' });
-  if (r.ema200 && r.price<r.ema20 && r.ema20<r.ema50 && r.ema50<r.ema200) t.push({ label:'All EMAs Bear', cls:'red' });
-  if (r.macd > r.macd_signal && r.macd_score>=75) t.push({ label:'MACD Cross ▲', cls:'blue' });
-  if (r.macd < r.macd_signal && r.macd_score<=30) t.push({ label:'MACD Cross ▼', cls:'red' });
-  if (r.rsi < 30)  t.push({ label:'RSI Oversold',   cls:'red' });
-  if (r.rsi > 70)  t.push({ label:'RSI Overbought', cls:'' });
-  if (r.rsi>=50 && r.rsi<=65) t.push({ label:'RSI Bullish', cls:'green' });
-  if (r.rsi>=35 && r.rsi<50)  t.push({ label:'RSI Bearish', cls:'red' });
-  if (r.tv_rating==='Strong Buy')  t.push({ label:'TV: Strong Buy',  cls:'purple' });
-  if (r.tv_rating==='Strong Sell') t.push({ label:'TV: Strong Sell', cls:'red' });
-  if (r.score>=80) t.push({ label:'High Confidence', cls:'purple' });
+
+  // ── EMA alignment ──
+  if (r.ema200 && r.price>r.ema20 && r.ema20>r.ema50 && r.ema50>r.ema200) t.push({ label:'EMA Stack ▲', cls:'green' });
+  if (r.ema200 && r.price<r.ema20 && r.ema20<r.ema50 && r.ema50<r.ema200) t.push({ label:'EMA Stack ▼', cls:'red' });
+
+  // ── MACD ──
+  if (r.macd > r.macd_signal && r.macd_score >= 75) t.push({ label:'MACD Cross ▲', cls:'blue' });
+  if (r.macd < r.macd_signal && r.macd_score <= 30) t.push({ label:'MACD Cross ▼', cls:'red' });
+
+  // ── TV rating ──
+  if (r.tv_rating === 'Strong Buy')  t.push({ label:'TV: Strong Buy',  cls:'purple' });
+  if (r.tv_rating === 'Strong Sell') t.push({ label:'TV: Strong Sell', cls:'red' });
+
+  // ── Confidence ──
+  if (r.score >= 80) t.push({ label:'High Confidence', cls:'purple' });
+
   return t;
+}
+
+// ── CSV Export ────────────────────────────────────────────────────────────
+function exportCSV() {
+  const rows = [...getFiltered()];
+  if (!rows.length) { alert('No results to export.'); return; }
+
+  const headers = ['Symbol','Name','Score','Direction','TV Rating','Price','Change%',
+                   'RSI','MACD','EMA Trend','Volume Ratio','RS vs SPY','ATR',
+                   'Entry','Target','Stop','Sector','Patterns','Divergence','MTF Align','Data As Of'];
+  const lines = [headers.join(',')];
+
+  rows.forEach(r => {
+    const emaDir = r.ema200
+      ? (r.price>r.ema20&&r.ema20>r.ema50&&r.ema50>r.ema200 ? 'Full Bull'
+         : r.price<r.ema20&&r.ema20<r.ema50&&r.ema50<r.ema200 ? 'Full Bear' : 'Mixed')
+      : (r.price>r.ema20 ? 'Above EMA20' : 'Below EMA20');
+    const row = [
+      r.symbol,
+      '"' + (r.name||'').replace(/"/g,'') + '"',
+      r.score, r.direction,
+      r.tv_rating||'—', r.price, r.change_pct||0,
+      r.rsi, (r.macd>r.macd_signal?'Bull':'Bear'),
+      emaDir, r.vol_ratio, r.rs_20||'',
+      r.atr, r.entry, r.target, r.stop,
+      r.sector||'',
+      '"' + (r.patterns||[]).join(';') + '"',
+      r.divergence||'', r.mtf_align||0,
+      r.last_candle||''
+    ];
+    lines.push(row.join(','));
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'usa_scan_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
 }
 
 // ── Build Card ────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ from tv_scanner import scan_tv
 from scanner import run_scan
 from stock_lists import get_symbols_by_sector, get_stock_info, SECTORS
 from news_fetch import fetch_news
+from core_regime import market_regime_score, regime_label
 
 app = Flask(__name__)
 CORS(app)
@@ -104,6 +105,7 @@ def scan():
     candles    = [r['last_candle'] for r in results if r.get('last_candle')]
     data_as_of = max(candles) if candles else ny_time()
 
+    reg = market_regime_score()
     payload = {
         'results':       results,
         'total_scanned': len(results),
@@ -115,6 +117,8 @@ def scan():
         'data_as_of':    data_as_of,
         'timeframe':     timeframe,
         'source':        source,
+        'regime_score':  reg,
+        'regime_label':  regime_label(reg),
         'from_cache':    False,
     }
 

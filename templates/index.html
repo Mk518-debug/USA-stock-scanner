@@ -52,6 +52,10 @@
           <div class="sb-label">Prevailing Trend</div>
         </div>
         <div class="stats-box">
+          <div class="sb-regime" id="sRegime">—</div>
+          <div class="sb-label">Market Regime</div>
+        </div>
+        <div class="stats-box">
           <div class="sb-time" id="sTime">—</div>
           <div class="sb-label">Last Scan</div>
           <span id="cacheTag" class="cache-tag" style="display:none">⚡ Cached</span>
@@ -79,6 +83,7 @@
             <option value="price">Price</option>
           </select>
           <button class="close-all-btn" onclick="closeAllWatched()">✕ Close All</button>
+          <button class="refresh-btn" onclick="exportCSV()" title="Export to CSV">⬇ CSV</button>
         </div>
       </div>
 
