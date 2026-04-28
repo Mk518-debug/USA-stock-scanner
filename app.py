@@ -173,8 +173,11 @@ def analysis():
             entry['data']['from_cache'] = True
             return jsonify(entry['data'])
     result = analyze_stock(symbol)
-    if result.get('error'):
-        return jsonify(result), 404
+    err = result.get('error', '')
+    if err:
+        is_rate_limit = 'rate' in err.lower() or 'too many' in err.lower() or '429' in err
+        result['rate_limited'] = is_rate_limit
+        return jsonify(result), 200   # always JSON, let frontend decide what to show
     result['from_cache'] = False
     _cset(cache_key, result)
     return jsonify(result)

@@ -576,8 +576,23 @@ async function runAnalysis(force) {
     });
     const text = await res.text();
     let d;
-    try { d = JSON.parse(text); } catch(_) { throw new Error('Server error'); }
-    if (d.error) throw new Error(d.error);
+    try { d = JSON.parse(text); } catch(_) { throw new Error('Server error — please try again.'); }
+
+    if (d.error) {
+      if (d.rate_limited) {
+        area.innerHTML =
+          '<div class="empty-msg" style="max-width:420px;margin:40px auto;text-align:center">' +
+          '<div style="font-size:2.5rem;margin-bottom:12px">⏳</div>' +
+          '<div style="font-size:1rem;font-weight:700;color:var(--yellow);margin-bottom:8px">Yahoo Finance Rate Limited</div>' +
+          '<div style="font-size:.85rem;color:var(--text2);margin-bottom:16px;line-height:1.6">' +
+          'Too many requests from this server.<br>Wait <strong>1–2 minutes</strong> then click Retry.</div>' +
+          '<button onclick="runAnalysis(true)" style="background:rgba(68,138,255,.15);border:1px solid rgba(68,138,255,.3);' +
+          'color:var(--blue);padding:8px 22px;border-radius:6px;cursor:pointer;font-size:.85rem;font-weight:600">↺ Retry</button>' +
+          '</div>';
+        return;
+      }
+      throw new Error(d.error);
+    }
     area.innerHTML = buildReport(d);
     requestAnimationFrame(fitScrollZones);
   } catch (err) {

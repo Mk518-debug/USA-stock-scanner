@@ -3,9 +3,34 @@
 Comprehensive Stock Analysis Engine
 Covers: Financial Statements, Valuation, Growth, Risk, News, Investment Verdict
 """
+import time
 import requests
 import yfinance as yf
 from news_fetch import fetch_news, _SESSION
+
+
+def _fetch_info(symbol, max_retries=3):
+    """Fetch ticker.info with retry on Yahoo Finance rate-limits."""
+    waits = [8, 15, 25]
+    for attempt in range(max_retries + 1):
+        try:
+            ticker = yf.Ticker(symbol, session=_SESSION)
+            info   = ticker.info or {}
+            price  = (_s(info.get('currentPrice'))
+                   or _s(info.get('regularMarketPrice'))
+                   or _s(info.get('previousClose')))
+            if price:
+                return ticker, info
+            return None, None          # unknown / bad symbol
+        except Exception as e:
+            msg = str(e).lower()
+            if ('rate' in msg or 'too many' in msg or '429' in msg) and attempt < max_retries:
+                wait = waits[min(attempt, len(waits) - 1)]
+                print('  [rate limit] %s — retry in %ds (%d/%d)' % (symbol, wait, attempt+1, max_retries))
+                time.sleep(wait)
+            else:
+                raise
+    return None, None
 
 TV_URL = 'https://scanner.tradingview.com/america/scan'
 _TV_HEADERS = {
@@ -115,14 +140,9 @@ def _buffett_score(info):
 # ── Single Stock Analysis ──────────────────────────────────────────────────
 def analyze_stock(symbol):
     try:
-        ticker = yf.Ticker(symbol.upper(), session=_SESSION)
-        info   = ticker.info or {}
-
-        price = (_s(info.get('currentPrice'))
-              or _s(info.get('regularMarketPrice'))
-              or _s(info.get('previousClose')))
-        if not price:
-            return {'error': 'Symbol not found: %s' % symbol}
+        ticker, info = _fetch_info(symbol.upper())
+        if ticker is None or info is None:
+            return {'error': 'Symbol not found or Yahoo Finance unavailable: %s' % symbol}
 
         news_items = fetch_news([symbol.upper()], max_per_symbol=8)
         buf_score, buf_verdict, buf_invest, buf_signals = _buffett_score(info)
