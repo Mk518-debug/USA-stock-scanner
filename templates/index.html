@@ -23,6 +23,12 @@
         </div>
       </div>
 
+      <!-- Mode tabs -->
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="modeScanner"  onclick="switchMode('scanner')">📊 Scanner</button>
+        <button class="mode-tab"        id="modeAnalysis" onclick="switchMode('analysis')">🔍 Analysis</button>
+      </div>
+
       <div class="header-right">
         <span id="marketStatus" class="market-badge closed">● CLOSED</span>
         <span id="nyTime" class="ny-time">Loading…</span>
@@ -129,6 +135,47 @@
       <div id="newsFeed"></div>
     </div>
 
+    <!-- ══ ANALYSIS PANEL ══ -->
+    <div id="analysisPanel" style="display:none">
+
+      <div class="sticky-bars" id="analysisStickyBars">
+        <div class="filter-bar" style="display:flex">
+          <div class="ftabs">
+            <button class="a-tab active" data-atab="report">📋 Stock Report</button>
+            <button class="a-tab" data-atab="screen">💎 Value Screener</button>
+          </div>
+          <div class="filter-right">
+            <span id="regimeBadge" class="regime-badge" style="display:none"></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="reportArea"  class="cards-area">
+        <div class="welcome">
+          <div class="welcome-icon">🔍</div>
+          <div class="welcome-title">Stock Analysis Report</div>
+          <div class="welcome-desc">Enter a symbol in the sidebar and click <strong>Run Analysis</strong></div>
+          <div class="feature-row">
+            <span class="feat">💰 Financial Statements</span>
+            <span class="feat">📈 Valuation Metrics</span>
+            <span class="feat">🚀 Growth &amp; Moat</span>
+            <span class="feat">⚠️ Risk Analysis</span>
+            <span class="feat">📰 News &amp; Catalysts</span>
+            <span class="feat">🧠 Buffett Score</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="screenArea" class="cards-area" style="display:none">
+        <div class="welcome">
+          <div class="welcome-icon">💎</div>
+          <div class="welcome-title">Value Screener</div>
+          <div class="welcome-desc">Set your filters in the sidebar and click <strong>Find Stocks</strong></div>
+        </div>
+      </div>
+
+    </div><!-- end #analysisPanel -->
+
   </div><!-- end .main-content -->
 
   <!-- ══ SIDEBAR ══ -->
@@ -202,11 +249,63 @@
 
       </div><!-- end #scannerSide -->
 
+      <!-- ── Analysis sidebar ── -->
+      <div id="analysisSide" style="display:none">
+
+        <!-- Stock Report inputs -->
+        <div id="reportSide">
+          <div class="sb-sec">
+            <div class="sb-sec-label">Stock Symbol</div>
+            <input id="analysisSymbol" class="ctrl-input full-w" type="text"
+              placeholder="e.g. AAPL, NVDA, MSFT"
+              onkeydown="if(event.key==='Enter')runAnalysis()">
+          </div>
+          <div class="sb-sec no-bottom">
+            <div class="sb-sec-label">Report includes</div>
+            <div class="res-checklist">
+              <div class="rc-check">✓ Revenue &amp; Earnings Growth</div>
+              <div class="rc-check">✓ Gross / Net / Operating Margins</div>
+              <div class="rc-check">✓ EPS Trends &amp; Projections</div>
+              <div class="rc-check">✓ Debt Levels &amp; Cash Flow</div>
+              <div class="rc-check">✓ P/E · P/B · EV/EBITDA · Yield</div>
+              <div class="rc-check">✓ Risk &amp; Beta Analysis</div>
+              <div class="rc-check">✓ News &amp; Catalysts</div>
+              <div class="rc-check">✓ Buffett Score &amp; Verdict</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Value Screener inputs -->
+        <div id="screenSide" style="display:none">
+          <div class="sb-sec">
+            <div class="sb-sec-label">Max P/E Ratio</div>
+            <input id="maxPE"  class="ctrl-input full-w" type="number" value="15" min="1" max="50">
+          </div>
+          <div class="sb-sec">
+            <div class="sb-sec-label">Max P/B Ratio</div>
+            <input id="maxPB"  class="ctrl-input full-w" type="number" value="3"  min="0" max="20">
+          </div>
+          <div class="sb-sec">
+            <div class="sb-sec-label">Min Dividend Yield (%)</div>
+            <input id="minDiv" class="ctrl-input full-w" type="number" value="0"  min="0" max="20" step="0.5">
+          </div>
+          <div class="sb-sec no-bottom">
+            <div class="sb-sec-label">Screener filters</div>
+            <div class="res-checklist">
+              <div class="rc-check">✓ Low P/E &amp; P/B ratios</div>
+              <div class="rc-check">✓ Positive earnings growth</div>
+              <div class="rc-check">✓ $1B+ market cap</div>
+              <div class="rc-check">✓ NYSE &amp; NASDAQ only</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- end #analysisSide -->
 
     </div><!-- end .sidebar-body -->
 
     <div class="sidebar-foot">
-      <button id="scanBtn" class="scan-btn-main" onclick="startScan()">
+      <button id="scanBtn"     class="scan-btn-main" onclick="onSideBtn()">
         <span id="scanBtnText">🔍 START SCAN</span>
       </button>
     </div>

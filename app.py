@@ -8,6 +8,8 @@ from tv_scanner import scan_tv
 from scanner import run_scan
 from stock_lists import get_symbols_by_sector, get_stock_info, SECTORS
 from news_fetch import fetch_news
+from analysis import analyze_stock, screen_undervalued
+from core_regime import market_regime_score, regime_label
 
 app = Flask(__name__)
 CORS(app)
@@ -155,6 +157,56 @@ def news():
     }
     _cset(cache_key, payload)
     return jsonify(payload)
+
+
+@app.route('/api/analysis', methods=['POST'])
+def analysis():
+    data   = request.get_json(force=True) or {}
+    symbol = (data.get('symbol') or '').strip().upper()
+    force  = data.get('force', False)
+    if not symbol:
+        return jsonify({'error': 'Symbol required'}), 400
+    cache_key = 'analysis|' + symbol
+    if not force:
+        entry = _cache.get(cache_key)
+        if entry and (time.time() - entry['ts'] < 900):
+            entry['data']['from_cache'] = True
+            return jsonify(entry['data'])
+    result = analyze_stock(symbol)
+    if result.get('error'):
+        return jsonify(result), 404
+    result['from_cache'] = False
+    _cset(cache_key, result)
+    return jsonify(result)
+
+
+@app.route('/api/undervalued', methods=['POST'])
+def undervalued():
+    data    = request.get_json(force=True) or {}
+    max_pe  = float(data.get('max_pe', 15) or 15)
+    min_div = float(data.get('min_div', 0)  or 0)
+    max_pb  = float(data.get('max_pb', 3)   or 3)
+    force   = data.get('force', False)
+    cache_key = 'undervalued|%.0f|%.1f|%.1f' % (max_pe, min_div, max_pb)
+    if not force:
+        entry = _cache.get(cache_key)
+        if entry and (time.time() - entry['ts'] < 900):
+            entry['data']['from_cache'] = True
+            return jsonify(entry['data'])
+    try:
+        results = screen_undervalued(max_pe=max_pe, min_div=min_div, max_pb=max_pb)
+    except Exception as e:
+        return jsonify({'error': str(e), 'results': []}), 500
+    payload = {'results': results, 'total': len(results),
+               'timestamp': ny_time(), 'from_cache': False}
+    _cset(cache_key, payload)
+    return jsonify(payload)
+
+
+@app.route('/api/regime')
+def regime():
+    score = market_regime_score()
+    return jsonify({'score': score, 'label': regime_label(score)})
 
 
 @app.route('/api/sectors')

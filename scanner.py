@@ -1,8 +1,11 @@
+import math
 import time
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from core_regime import market_regime_score
 
 
 def _rsi(prices, period=14):
@@ -87,6 +90,58 @@ def _fmt_candle_date(ts, timeframe):
         return str(ts)
 
 
+# ── Smooth + slope-aware RSI scoring (Section 8.2) ─────────────────────
+def rsi_score(r_now, r_prev):
+    """0..100 score that is smooth in level and aware of direction.
+
+    Replaces the original cliff-threshold scoring which was non-monotonic
+    (RSI 60-70 scored 85 but RSI 70-80 scored only 78).
+    """
+    try:
+        r_now = float(r_now); r_prev = float(r_prev)
+    except Exception:
+        return 50.0
+    # Gaussian centered at 60 (sigma 18) — peaks near "strong but not extreme"
+    base  = 100.0 * math.exp(-((r_now - 60.0) ** 2) / (2 * 18.0 ** 2))
+    slope = r_now - r_prev
+    bonus = max(-15.0, min(15.0, slope * 1.5))
+    if r_now > 80 and slope < 0:  bonus -= 25.0  # exhaustion turning down
+    if r_now < 20 and slope > 0:  bonus += 20.0  # bounce from oversold
+    return max(0.0, min(100.0, base + bonus))
+
+
+# ── Multi-timeframe confluence (Section 8.3) ───────────────────────────
+_NEXT_TF = {'15m': '1h', '1h': '4h', '4h': '1d', '1d': '1wk'}
+
+
+def htf_alignment(symbol, timeframe):
+    """+1 if higher TF agrees bullishly, -1 if bearishly, 0 if mixed/unavailable."""
+    htf = _NEXT_TF.get(timeframe)
+    if not htf:
+        return 0
+    # 1wk isn't in _INTERVAL_PARAMS; fall back to 1d data for its "next up" check
+    if htf == '1wk':
+        df = _fetch_with_retry(symbol, '1d')
+        if df is None or len(df) < 50:
+            return 0
+        # Resample to weekly
+        df = df.resample('W').agg({'Close': 'last'}).dropna()
+        if len(df) < 12:
+            return 0
+        close = df['Close'].squeeze()
+    else:
+        df = _fetch_with_retry(symbol, htf)
+        if df is None or len(df) < 50:
+            return 0
+        close = df['Close'].squeeze()
+    e20 = close.ewm(span=20, adjust=False).mean().iloc[-1]
+    e50 = close.ewm(span=50, adjust=False).mean().iloc[-1]
+    c   = close.iloc[-1]
+    if c > e20 > e50: return 1
+    if c < e20 < e50: return -1
+    return 0
+
+
 def analyze(symbol, timeframe='1d'):
     try:
         df = _fetch_with_retry(symbol, timeframe)
@@ -108,8 +163,10 @@ def analyze(symbol, timeframe='1d'):
         vol_ma              = vol.rolling(20).mean()
         atr_s               = _atr(high, low, close)
 
-        c    = float(close.iloc[-1])
-        r    = float(rsi_s.iloc[-1])
+        c     = float(close.iloc[-1])
+        r     = float(rsi_s.iloc[-1])
+        # Previous RSI (3 bars back) for slope detection
+        r_prev = float(rsi_s.iloc[-3]) if len(rsi_s) >= 3 else r
         ml   = float(macd_l.iloc[-1])
         sl   = float(sig_l.iloc[-1])
         h0   = float(hist.iloc[-1])
@@ -144,14 +201,8 @@ def analyze(symbol, timeframe='1d'):
         else:
             macd_sc = 18 if (h0 < 0 and h0 < h1) else 32 if h0 < 0 else 42
 
-        # ── RSI score (0-100) ────────────────────────────────────────────────
-        if   r >= 80: rsi_sc = 55
-        elif r >= 70: rsi_sc = 78
-        elif r >= 60: rsi_sc = 85
-        elif r >= 50: rsi_sc = 65
-        elif r >= 40: rsi_sc = 35
-        elif r >= 30: rsi_sc = 22
-        else:         rsi_sc = 10
+        # ── RSI score (smooth + slope-aware, replaces cliff thresholds) ──────
+        rsi_sc = rsi_score(r, r_prev)
 
         # ── Volume score (0-100) ─────────────────────────────────────────────
         vr = v / vma if vma > 0 else 1.0
@@ -161,7 +212,18 @@ def analyze(symbol, timeframe='1d'):
         elif vr >= 0.7: vol_sc = 38
         else:           vol_sc = 20
 
-        composite = 0.35 * ema_sc + 0.30 * macd_sc + 0.25 * rsi_sc + 0.10 * vol_sc
+        # ── Market regime (Section 8.1) ──────────────────────────────────────
+        reg        = market_regime_score()
+        regime_adj = (reg - 50) / 50.0   # -1..+1
+        regime_sc  = 50 + 50 * regime_adj
+
+        composite = (
+            0.32 * ema_sc
+            + 0.27 * macd_sc
+            + 0.22 * rsi_sc
+            + 0.09 * vol_sc
+            + 0.10 * regime_sc
+        )
 
         if composite > 55:
             direction = 'Bullish'
@@ -173,6 +235,16 @@ def analyze(symbol, timeframe='1d'):
         strength = min(100, int(abs(composite - 50) * 3))
         if direction == 'Neutral':
             strength = min(strength, 25)
+
+        # ── Multi-timeframe confluence multiplier (Section 8.3) ──────────────
+        mtf = htf_alignment(symbol, timeframe)
+        if direction == 'Bullish':
+            mult = 1.2 if mtf > 0 else 0.6 if mtf < 0 else 1.0
+        elif direction == 'Bearish':
+            mult = 1.2 if mtf < 0 else 0.6 if mtf > 0 else 1.0
+        else:
+            mult = 1.0
+        strength = min(100, int(strength * mult))
 
         if direction == 'Bullish':
             target = round(c + 2.0 * atr, 2)
@@ -204,6 +276,8 @@ def analyze(symbol, timeframe='1d'):
             'macd_score':  round(macd_sc, 1),
             'rsi_score':   round(rsi_sc, 1),
             'vol_score':   round(vol_sc, 1),
+            'regime_score': int(reg),
+            'mtf_align':   int(mtf),
             'last_candle': last_candle,
         }
     except Exception as e:

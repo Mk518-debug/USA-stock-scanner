@@ -13,13 +13,10 @@ function fitScrollZones() {
   const stickyH = sticky  ? sticky.offsetHeight  : 0;
   const scrollH = Math.max(100, winH - headerH - stickyH);
 
-  const zones = ['cardsArea', 'newsArea'];
-  zones.forEach(id => {
+  ['cardsArea','newsArea','reportArea','screenArea'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.height = scrollH + 'px';
   });
-
-  // Sidebar height
   if (sidebar) sidebar.style.height = winH + 'px';
 }
 
@@ -382,9 +379,56 @@ function setLoading(on) {
   document.getElementById('loadingOverlay').style.display = on ? 'flex' : 'none';
   const btn = document.getElementById('scanBtn');
   if (btn) btn.disabled = on;
-  const txt = document.getElementById('scanBtnText');
-  if (txt) txt.textContent = on ? '⏳ SCANNING…' : '🔍 START SCAN';
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+//  MODE SWITCHING  (Scanner | Analysis)
+// ══════════════════════════════════════════════════════════════════════════
+let currentMode = 'scanner';
+let analysisTab = 'report';
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('modeScanner').classList.toggle('active',  mode === 'scanner');
+  document.getElementById('modeAnalysis').classList.toggle('active', mode === 'analysis');
+  document.getElementById('scannerPanel').style.display  = mode === 'scanner'  ? '' : 'none';
+  document.getElementById('analysisPanel').style.display = mode === 'analysis' ? '' : 'none';
+  document.getElementById('scannerSide').style.display   = mode === 'scanner'  ? '' : 'none';
+  document.getElementById('analysisSide').style.display  = mode === 'analysis' ? '' : 'none';
+  const txt = document.getElementById('scanBtnText');
+  if (mode === 'analysis') {
+    txt.textContent = analysisTab === 'report' ? '🔍 RUN ANALYSIS' : '💎 FIND STOCKS';
+    loadRegime();
+  } else {
+    txt.textContent = '🔍 START SCAN';
+  }
+  requestAnimationFrame(fitScrollZones);
+}
+
+function onSideBtn(force = false) {
+  if (currentMode === 'analysis') {
+    if (analysisTab === 'report') runAnalysis(force);
+    else runValueScreen(force);
+  } else {
+    startScan(force);
+  }
+}
+
+// Wire analysis sub-tabs
+document.querySelectorAll('.a-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.a-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    analysisTab = tab.dataset.atab;
+    document.getElementById('reportArea').style.display  = analysisTab === 'report' ? '' : 'none';
+    document.getElementById('screenArea').style.display  = analysisTab === 'screen' ? '' : 'none';
+    document.getElementById('reportSide').style.display  = analysisTab === 'report' ? '' : 'none';
+    document.getElementById('screenSide').style.display  = analysisTab === 'screen' ? '' : 'none';
+    const txt = document.getElementById('scanBtnText');
+    txt.textContent = analysisTab === 'report' ? '🔍 RUN ANALYSIS' : '💎 FIND STOCKS';
+    requestAnimationFrame(fitScrollZones);
+  });
+});
 
 // ══════════════════════════════════════════════════════════════════════════
 //  NEWS SECTION
@@ -494,4 +538,334 @@ function renderNews() {
         ${thumb}
       </div>`;
   }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  ANALYSIS SECTION
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Market Regime badge ───────────────────────────────────────────────────
+async function loadRegime() {
+  try {
+    const res  = await fetch('/api/regime');
+    const data = await res.json();
+    const el   = document.getElementById('regimeBadge');
+    if (!el) return;
+    const cls = data.score >= 55 ? 'regime-on' : data.score <= 45 ? 'regime-off' : 'regime-neu';
+    el.textContent   = 'Market: ' + data.label + ' (' + data.score + ')';
+    el.className     = 'regime-badge ' + cls;
+    el.style.display = '';
+  } catch (_) {}
+}
+
+// ── Stock Report ──────────────────────────────────────────────────────────
+async function runAnalysis(force) {
+  const sym = (document.getElementById('analysisSymbol').value || '').trim().toUpperCase();
+  if (!sym) { alert('Enter a stock symbol first.'); return; }
+
+  const area = document.getElementById('reportArea');
+  area.innerHTML = '<div class="news-loading"><div class="spinner" style="margin:0 auto 14px"></div>Fetching data for ' + sym + '...</div>';
+  const txt = document.getElementById('scanBtnText');
+  txt.textContent = 'LOADING...';
+  document.getElementById('scanBtn').disabled = true;
+
+  try {
+    const res  = await fetch('/api/analysis', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ symbol: sym, force: !!force }),
+    });
+    const text = await res.text();
+    let d;
+    try { d = JSON.parse(text); } catch(_) { throw new Error('Server error'); }
+    if (d.error) throw new Error(d.error);
+    area.innerHTML = buildReport(d);
+    requestAnimationFrame(fitScrollZones);
+  } catch (err) {
+    area.innerHTML = '<div class="error-msg">Error: ' + err.message + '</div>';
+  } finally {
+    txt.textContent = 'RUN ANALYSIS';
+    document.getElementById('scanBtn').disabled = false;
+  }
+}
+
+// ── Value Screener ────────────────────────────────────────────────────────
+async function runValueScreen(force) {
+  const max_pe  = parseFloat(document.getElementById('maxPE').value)  || 15;
+  const max_pb  = parseFloat(document.getElementById('maxPB').value)  || 3;
+  const min_div = parseFloat(document.getElementById('minDiv').value) || 0;
+
+  const area = document.getElementById('screenArea');
+  area.innerHTML = '<div class="news-loading"><div class="spinner" style="margin:0 auto 14px"></div>Screening for undervalued stocks...</div>';
+  document.getElementById('scanBtnText').textContent = 'SCREENING...';
+  document.getElementById('scanBtn').disabled = true;
+
+  try {
+    const res  = await fetch('/api/undervalued', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ max_pe, max_pb, min_div, force: !!force }),
+    });
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    area.innerHTML = buildScreenerTable(d.results, d.timestamp);
+    requestAnimationFrame(fitScrollZones);
+  } catch (err) {
+    area.innerHTML = '<div class="error-msg">Error: ' + err.message + '</div>';
+  } finally {
+    document.getElementById('scanBtnText').textContent = 'FIND STOCKS';
+    document.getElementById('scanBtn').disabled = false;
+  }
+}
+
+// ── Helpers for report rendering ──────────────────────────────────────────
+function _sig(v, good, bad, invert) {
+  if (v === null || v === undefined) return 'muted';
+  if (invert) return v <= good ? 'good' : v <= bad ? 'ok' : 'bad';
+  return v >= good ? 'good' : v >= bad ? 'ok' : 'bad';
+}
+function _pctFmt(v) {
+  if (v === null || v === undefined) return '<span style="color:var(--text3)">N/A</span>';
+  const sign = v >= 0 ? '+' : '';
+  const cls  = v >= 0 ? 'green' : 'red';
+  return '<span class="' + cls + '">' + sign + (v * 100).toFixed(1) + '%</span>';
+}
+function _m(label, val, sig) {
+  sig = sig || 'muted';
+  return '<div class="ar-metric"><div class="ar-m-label">' + label +
+    '</div><div class="ar-m-val ' + sig + '">' + (val !== null && val !== undefined ? val : 'N/A') + '</div></div>';
+}
+
+// ── Full report builder ───────────────────────────────────────────────────
+function buildReport(d) {
+  const dir    = d.direction === 'Bullish' ? 'bull' : d.direction === 'Bearish' ? 'bear' : 'neu';
+  const chgCls = d.change_pct >= 0 ? 'green' : 'red';
+  const chgS   = d.change_pct >= 0 ? '+' : '';
+
+  // 52-week position (0-100%)
+  const pct52 = (d.week52_high && d.week52_low && d.week52_high !== d.week52_low)
+    ? Math.round((d.price - d.week52_low) / (d.week52_high - d.week52_low) * 100)
+    : 50;
+
+  // Buffett signals chips
+  const bufSigs = (d.buffett_signals || []).map(function(s) {
+    return '<span class="buf-sig ' + s.s + '">' + s.k + ': ' + s.v + '</span>';
+  }).join('');
+
+  // News items
+  const CAT_E = {earn:'📊',launch:'🚀',upgrade:'⬆',deal:'🤝',approv:'✅',ma:'🏢',div:'💰',news:'📰'};
+  const newsHtml = (d.news || []).length
+    ? (d.news || []).map(function(n) {
+        return '<div class="ni" style="margin-bottom:8px">' +
+          '<span class="ni-cat-tag nc-' + n.cat_cls + '">' + (CAT_E[n.cat_cls] || '📰') + ' ' + n.cat + '</span>' +
+          '<a href="' + n.url + '" target="_blank" rel="noopener" class="ni-title" style="margin-left:8px;font-size:.82rem">' + n.title + '</a>' +
+          '<span class="ni-time" style="margin-left:8px">' + n.time_str + '</span></div>';
+      }).join('')
+    : '<span style="color:var(--text3);font-size:.82rem">No recent news</span>';
+
+  const upside = (d.upside !== null && d.upside !== undefined)
+    ? '<span class="' + (d.upside >= 0 ? 'green' : 'red') + '">' +
+      (d.upside >= 0 ? '+' : '') + d.upside.toFixed(1) + '% to analyst target</span>'
+    : 'N/A';
+
+  // FCF formatted
+  const fcfFmt = d.fcf && d.fcf >= 1e9  ? '+$' + (d.fcf/1e9).toFixed(1) + 'B'
+               : d.fcf && d.fcf > 0     ? '+$' + (d.fcf/1e6).toFixed(0) + 'M'
+               : d.fcf && d.fcf < 0     ? '-$' + (Math.abs(d.fcf)/1e6).toFixed(0) + 'M'
+               : 'N/A';
+  const fcfSig = d.fcf && d.fcf > 0 ? 'good' : d.fcf && d.fcf < 0 ? 'bad' : 'muted';
+
+  return '<div class="ar-wrap">' +
+
+  // ── Header ──
+  '<div class="ar-header">' +
+    '<div class="ar-left">' +
+      '<div class="ar-sym">' + d.symbol + '</div>' +
+      '<div class="ar-name">' + d.name + '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+        '<span class="sector-tag">' + (d.sector || '') + '</span>' +
+        (d.industry ? '<span class="industry-tag">' + d.industry + '</span>' : '') +
+      '</div>' +
+      '<div class="ar-price-row">' +
+        '<span class="ar-price">$' + d.price + '</span>' +
+        '<span class="ar-chg ' + chgCls + '">' + chgS + d.change_pct + '%</span>' +
+        '<span style="color:var(--text3);font-size:.75rem">· ' + d.market_cap + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ar-right">' +
+      '<span class="ar-verdict ' + dir + '">' +
+        (d.direction === 'Bullish' ? '📈' : '📉') + ' ' + d.direction +
+      '</span>' +
+      '<div class="ar-buf-score">' +
+        '<div class="ar-buf-num">' + d.buffett_score + '/100</div>' +
+        '<div class="ar-buf-lbl">Buffett Score</div>' +
+        '<div class="ar-buf-invest">' + d.buffett_invest + '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>' +
+
+  // ── Section 1: Financial Statements ──
+  '<div class="ar-section">' +
+    '<div class="ar-sec-head"><span class="ar-sec-title">1️⃣ Financial Statements</span></div>' +
+    '<div class="ar-sec-body"><div class="ar-grid">' +
+      _m('Revenue Growth (YoY)', _pctFmt(d.revenue_growth)) +
+      _m('Earnings Growth (YoY)', _pctFmt(d.earnings_growth)) +
+      _m('Gross Margin', d.gross_margin !== null ? (d.gross_margin*100).toFixed(1)+'%' : 'N/A', _sig(d.gross_margin,0.50,0.25)) +
+      _m('Net Margin',   d.net_margin   !== null ? (d.net_margin  *100).toFixed(1)+'%' : 'N/A', _sig(d.net_margin,  0.15,0.05)) +
+      _m('Operating Margin', d.op_margin !== null ? (d.op_margin  *100).toFixed(1)+'%' : 'N/A', _sig(d.op_margin,   0.20,0.08)) +
+      _m('EPS (TTM)',    '$'+d.eps_ttm,  _sig(d.eps_ttm,   1, 0)) +
+      _m('EPS (Forward)','$'+d.eps_fwd,  _sig(d.eps_fwd,   d.eps_ttm, 0)) +
+      _m('Debt / Equity', d.debt_equity+'%', _sig(d.debt_equity, 200, 100, true)) +
+      _m('Current Ratio', d.current_ratio,   _sig(d.current_ratio, 1.5, 1.0)) +
+      _m('Free Cash Flow', fcfFmt, fcfSig) +
+      _m('ROE', d.roe !== null ? (d.roe*100).toFixed(1)+'%' : 'N/A', _sig(d.roe, 0.20, 0.10)) +
+      _m('ROA', d.roa !== null ? (d.roa*100).toFixed(1)+'%' : 'N/A', _sig(d.roa, 0.10, 0.05)) +
+    '</div></div>' +
+  '</div>' +
+
+  // ── Section 2: Valuation ──
+  '<div class="ar-section">' +
+    '<div class="ar-sec-head"><span class="ar-sec-title">2️⃣ Valuation Metrics</span></div>' +
+    '<div class="ar-sec-body"><div class="ar-grid">' +
+      _m('P/E Ratio (TTM)',  d.pe_ttm  || 'N/A', _sig(d.pe_ttm,  25, 40, true)) +
+      _m('P/E Ratio (Fwd)',  d.pe_fwd  || 'N/A', _sig(d.pe_fwd,  20, 30, true)) +
+      _m('Price / Book',     d.pb      || 'N/A', _sig(d.pb,       3,  6, true)) +
+      _m('EV / EBITDA',      d.ev_ebitda|| 'N/A',_sig(d.ev_ebitda,15,25, true)) +
+      _m('PEG Ratio',        d.peg     || 'N/A', _sig(d.peg,     1.5,2.5,true)) +
+      _m('Dividend Yield',   d.div_yield ? d.div_yield+'%' : '—', d.div_yield > 2 ? 'good' : 'muted') +
+      _m('Beta',             d.beta,             _sig(d.beta, 1.5, 2.0, true)) +
+      _m('52W High',        '$'+d.week52_high) +
+      _m('52W Low',         '$'+d.week52_low) +
+    '</div>' +
+    '<div class="ar-52w-bar" style="margin-top:14px">' +
+      '<div style="font-size:.7rem;color:var(--text3);margin-bottom:4px">52-Week Price Range</div>' +
+      '<div class="ar-52w-track">' +
+        '<div class="ar-52w-dot" style="left:' + pct52 + '%"></div>' +
+      '</div>' +
+      '<div class="ar-52w-lbls">' +
+        '<span>$' + d.week52_low + '</span>' +
+        '<span style="color:var(--text2)">Now $' + d.price + '</span>' +
+        '<span>$' + d.week52_high + '</span>' +
+      '</div>' +
+    '</div>' +
+    '</div>' +
+  '</div>' +
+
+  // ── Section 3: Growth & Competitive ──
+  '<div class="ar-section">' +
+    '<div class="ar-sec-head"><span class="ar-sec-title">3️⃣ Growth &amp; Competitive Position</span></div>' +
+    '<div class="ar-sec-body"><div class="ar-grid">' +
+      _m('Revenue Growth',    _pctFmt(d.revenue_growth)) +
+      _m('EPS Growth',        _pctFmt(d.earnings_growth)) +
+      _m('ROE',               d.roe !== null ? (d.roe*100).toFixed(1)+'%' : 'N/A', _sig(d.roe,0.20,0.10)) +
+      _m('Analyst Target',    d.target_price ? '$'+d.target_price : 'N/A') +
+      _m('Upside / Downside', upside) +
+      _m('Analyst Consensus', d.analyst_rec,
+         d.analyst_rec==='Strong Buy'||d.analyst_rec==='Buy' ? 'good' :
+         d.analyst_rec==='Hold' ? 'ok' : 'bad') +
+      _m('# of Analysts',     d.analyst_count || 'N/A') +
+    '</div></div>' +
+  '</div>' +
+
+  // ── Section 4: Risk Analysis ──
+  '<div class="ar-section">' +
+    '<div class="ar-sec-head"><span class="ar-sec-title">4️⃣ Risk Analysis</span></div>' +
+    '<div class="ar-sec-body"><div class="ar-grid">' +
+      _m('Beta (Volatility)',  d.beta,            _sig(d.beta,       1.5, 2.0, true)) +
+      _m('Debt / Equity',      d.debt_equity+'%', _sig(d.debt_equity,200, 100, true)) +
+      _m('Current Ratio',      d.current_ratio,   _sig(d.current_ratio,1.5,1.0)) +
+      _m('Quick Ratio',        d.quick_ratio,     _sig(d.quick_ratio,  1.0,0.7)) +
+      _m('Short % of Float',   d.short_float ? d.short_float+'%' : 'N/A',
+         _sig(d.short_float, 20, 10, true)) +
+    '</div></div>' +
+  '</div>' +
+
+  // ── Section 5: News ──
+  '<div class="ar-section">' +
+    '<div class="ar-sec-head"><span class="ar-sec-title">5️⃣ Recent News &amp; Catalysts</span></div>' +
+    '<div class="ar-sec-body">' + newsHtml + '</div>' +
+  '</div>' +
+
+  // ── Section 6: Investment Verdict ──
+  '<div class="ar-section">' +
+    '<div class="ar-sec-head"><span class="ar-sec-title">6️⃣ Investment Verdict</span></div>' +
+    '<div class="ar-sec-body">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">' +
+        '<div style="background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.2);border-radius:8px;padding:12px">' +
+          '<div style="color:var(--green);font-weight:700;margin-bottom:6px">📈 Bullish Case</div>' +
+          '<div style="font-size:.82rem;color:var(--text2);line-height:1.5">' +
+            (d.direction === 'Bullish' ? 'Technical momentum is positive. ' : '') +
+            (d.earnings_growth && d.earnings_growth > 0 ? 'Earnings growing at ' + (d.earnings_growth*100).toFixed(1) + '%. ' : '') +
+            (d.fcf && d.fcf > 0 ? 'Positive free cash flow. ' : '') +
+            (d.buffett_score >= 60 ? 'Passes Buffett quality criteria.' : '') +
+          '</div>' +
+        '</div>' +
+        '<div style="background:rgba(255,23,68,.05);border:1px solid rgba(255,23,68,.15);border-radius:8px;padding:12px">' +
+          '<div style="color:var(--red);font-weight:700;margin-bottom:6px">📉 Bearish Case</div>' +
+          '<div style="font-size:.82rem;color:var(--text2);line-height:1.5">' +
+            (d.debt_equity > 150 ? 'High debt ('+d.debt_equity+'%). ' : '') +
+            (d.beta > 1.5 ? 'High beta '+d.beta+' = elevated risk. ' : '') +
+            (d.pe_ttm > 30 ? 'Premium valuation P/E '+d.pe_ttm+'. ' : '') +
+            (d.short_float > 10 ? 'High short interest '+d.short_float+'%. ' : '') +
+            (d.direction === 'Bearish' ? 'Technical trend is bearish.' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size:.82rem;color:var(--text2);margin-bottom:10px;padding:10px;background:rgba(179,136,255,.06);border-radius:6px;border-left:3px solid var(--purple)">' +
+        '<strong style="color:var(--purple)">If Warren Buffett:</strong> ' + d.buffett_invest +
+      '</div>' +
+      '<div class="buf-signals">' + bufSigs + '</div>' +
+    '</div>' +
+  '</div>' +
+
+  // ── External links ──
+  '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">' +
+    '<a href="https://finance.yahoo.com/quote/' + d.symbol + '" target="_blank" rel="noopener" class="rc-link-btn">💹 Yahoo Finance</a>' +
+    '<a href="https://www.tradingview.com/chart/?symbol=' + d.symbol + '" target="_blank" rel="noopener" class="rc-link-btn">📊 TradingView</a>' +
+    '<a href="https://stockanalysis.com/stocks/' + d.symbol.toLowerCase() + '/" target="_blank" rel="noopener" class="rc-link-btn">📋 Stock Analysis</a>' +
+  '</div>' +
+  '</div>';
+}
+
+// ── Value Screener Table ──────────────────────────────────────────────────
+function buildScreenerTable(results, ts) {
+  if (!results || !results.length)
+    return '<div class="empty-msg">No stocks matched your filters. Try relaxing the criteria.</div>';
+
+  const rows = results.map(function(r, i) {
+    const chgCls = r.change_pct >= 0 ? 'green' : 'red';
+    const dirCls = r.tv_dir === 'Bullish' ? 'bull' : 'bear';
+    return '<tr class="vs-row" onclick="switchToReport(\'' + r.symbol + '\')">' +
+      '<td style="color:var(--text3)">' + (i+1) + '</td>' +
+      '<td><div class="vs-sym">' + r.symbol + '</div><div class="vs-name">' + r.name + '</div></td>' +
+      '<td>$' + r.price +
+        ' <span class="' + chgCls + '">' + (r.change_pct>=0?'+':'') + r.change_pct + '%</span></td>' +
+      '<td><span class="dir ' + dirCls + '">' + (r.tv_dir==='Bullish'?'▲':'▼') + ' ' + r.tv_dir + '</span></td>' +
+      '<td class="' + (r.pe>0&&r.pe<15?'green':r.pe>25?'bad':'') + '">' + (r.pe||'—') + '</td>' +
+      '<td>' + (r.pb||'—') + '</td>' +
+      '<td class="' + (r.div_yield>2?'green':'') + '">' + (r.div_yield?r.div_yield+'%':'—') + '</td>' +
+      '<td class="' + (r.eps_growth>10?'green':r.eps_growth<0?'red':'') + '">' + (r.eps_growth?r.eps_growth+'%':'—') + '</td>' +
+      '<td class="' + (r.roe>15?'green':'') + '">' + (r.roe?r.roe+'%':'—') + '</td>' +
+      '<td><span class="sector-tag">' + r.sector + '</span></td>' +
+    '</tr>';
+  }).join('');
+
+  return '<div style="overflow-x:auto">' +
+    '<div style="font-size:.75rem;color:var(--text3);margin-bottom:8px">Found ' + results.length +
+    ' undervalued stocks · ' + (ts||'') + ' · Click any row for full report</div>' +
+    '<table class="vs-table"><thead><tr>' +
+    '<th>#</th><th>Symbol</th><th>Price</th><th>Signal</th>' +
+    '<th>P/E</th><th>P/B</th><th>Div Yield</th><th>EPS Growth</th><th>ROE</th><th>Sector</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function switchToReport(symbol) {
+  document.getElementById('analysisSymbol').value = symbol;
+  document.querySelectorAll('.a-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelector('.a-tab[data-atab="report"]').classList.add('active');
+  analysisTab = 'report';
+  document.getElementById('reportArea').style.display  = '';
+  document.getElementById('screenArea').style.display  = 'none';
+  document.getElementById('reportSide').style.display  = '';
+  document.getElementById('screenSide').style.display  = 'none';
+  document.getElementById('scanBtnText').textContent   = 'RUN ANALYSIS';
+  runAnalysis();
 }
