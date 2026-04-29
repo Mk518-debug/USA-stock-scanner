@@ -92,35 +92,7 @@ def _vol_score(vr):
     return 35
 
 
-# ── Islamic / Shariah screening constants (AAOIFI standards) ─────────────
-# Sectors excluded because their core business involves interest or prohibited activities
-_HARAM_TV_SECTORS = {'Financial'}          # banks, insurance, investment firms (riba)
-
-# Additional industries blocked regardless of sector
-_HARAM_KEYWORDS = [
-    'bank', 'insurance', 'casino', 'gambling', 'alcohol', 'tobacco',
-    'distill', 'beverage', 'brewery', 'winery', 'spirits',
-]
-
-# AAOIFI financial ratio thresholds (applied when data available)
-# Total debt / market cap < 33%  →  approximated by debt_to_equity < 100
-_MAX_DEBT_EQUITY_ISLAMIC = 100   # < 100% = debt less than equity
-
-
-def is_shariah_compliant(sector_tv, industry, debt_equity):
-    """Quick client-side/backend Shariah screen. Returns True if potentially compliant."""
-    if sector_tv in _HARAM_TV_SECTORS:
-        return False
-    if industry:
-        il = industry.lower()
-        if any(k in il for k in _HARAM_KEYWORDS):
-            return False
-    if debt_equity is not None and debt_equity > _MAX_DEBT_EQUITY_ISLAMIC:
-        return False
-    return True
-
-
-def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200, islamic=False):
+def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200):
     sf = _TF.get(timeframe, '')
 
     cols = [
@@ -130,8 +102,6 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200, islamic=False
         f'EMA20{sf}', f'EMA50{sf}', f'EMA200{sf}',
         'volume', 'average_volume_10d_calc',
         'ATR', 'sector', 'exchange', 'market_cap_basic',
-        'debt_to_equity_fq',     # needed for Shariah debt screen
-        'industry_group',        # needed for industry-level Shariah screen
     ]
 
     filters = [
@@ -144,19 +114,6 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200, islamic=False
     if sector and sector.lower() not in ('all', ''):
         tv_sector = _SECTOR_TV.get(sector, sector)
         filters.append({'left': 'sector', 'operation': 'equal', 'right': tv_sector})
-
-    # ── Islamic / Shariah filters ──────────────────────────────────────────
-    if islamic:
-        # Exclude Financial sector (interest-based core business)
-        for haram in _HARAM_TV_SECTORS:
-            filters.append({'left': 'sector', 'operation': 'not_equal', 'right': haram})
-        # AAOIFI debt ratio: total debt < 33% of market cap
-        # Approximated by debt_to_equity_fq < 100 (debt < equity)
-        filters.append({
-            'left':      'debt_to_equity_fq',
-            'operation': 'in_range',
-            'right':     [0, _MAX_DEBT_EQUITY_ISLAMIC],
-        })
 
     body = {
         'filter':  filters,
@@ -202,11 +159,6 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200, islamic=False
         tv_sector = cm.get('sector') or 'Unknown'
         sector_display = _SECTOR_MAP.get(tv_sector, tv_sector)
         exchange  = cm.get('exchange') or 'NASDAQ'
-        industry  = cm.get('industry_group') or ''
-        debt_eq   = cm.get('debt_to_equity_fq')
-
-        # Shariah compliance flag (per-stock screen)
-        halal = is_shariah_compliant(tv_sector, industry, debt_eq)
 
         if direction == 'Bullish':
             target = round(price + 2.0 * atr, 2) if atr else None
@@ -248,8 +200,6 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200, islamic=False
             'rsi_score':     _rsi_score(rsi),
             'vol_score':     _vol_score(vr),
             'composite':     round((rec + 1) / 2 * 100, 1) if rec is not None else 50,
-            'halal':         halal,
-            'debt_equity':   round(float(debt_eq), 1) if debt_eq else None,
         })
 
     results.sort(key=lambda x: x['score'], reverse=True)
