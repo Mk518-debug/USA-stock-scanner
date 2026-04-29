@@ -221,46 +221,29 @@ function render() {
 function getPatterns(r) {
   const t = [];
 
-  // ── Backend-supplied patterns (candlesticks + breakout) ──
+  // Backend-supplied patterns (already assembled in scanner.py / tv_scanner.py)
   if (r.patterns && r.patterns.length) {
     r.patterns.forEach(p => {
-      const cls = (p==='Bull Engulfing'||p==='Hammer'||p==='20D Breakout') ? 'green'
-                : (p==='Bear Engulfing'||p==='Shooting Star') ? 'red' : '';
+      const lp = p.toLowerCase();
+      const cls = (lp.includes('bull') || lp.includes('hammer') ||
+                   lp.includes('breakout') || lp.includes('rs+') ||
+                   lp.includes('htf aligned') || lp.includes('bullish')) ? 'green'
+                : (lp.includes('bear') || lp.includes('star') ||
+                   lp.includes('rs-') || lp.includes('bearish')) ? 'red'
+                : (lp.includes('adx')) ? 'blue'
+                : (lp.includes('bb squeeze')) ? 'purple'
+                : '';
       t.push({ label: p, cls });
     });
   }
 
-  // ── Divergence (from backend) ──
-  if (r.divergence === 'bullish')  t.push({ label:'RSI Div ▲', cls:'green' });
-  if (r.divergence === 'bearish')  t.push({ label:'RSI Div ▼', cls:'red' });
+  // TV Strong rating badge
+  if (r.tv_rating === 'Strong Buy')  t.push({ label:'TV Strong Buy',  cls:'green' });
+  if (r.tv_rating === 'Strong Sell') t.push({ label:'TV Strong Sell', cls:'red' });
 
-  // ── MTF alignment ──
-  if (r.mtf_align ===  1) t.push({ label:'HTF Aligned ▲', cls:'green' });
-  if (r.mtf_align === -1) t.push({ label:'HTF Conflict ▼', cls:'red' });
-
-  // ── Relative strength vs SPY ──
-  if (r.rs_20 !== undefined && r.rs_20 !== null) {
-    if (r.rs_20 >= 5)  t.push({ label:'RS+ vs SPY', cls:'green' });
-    if (r.rs_20 <= -5) t.push({ label:'RS- vs SPY', cls:'red' });
-  }
-
-  // ── Volume spike ──
-  if (r.vol_ratio >= 1.3) t.push({ label:`Vol +${Math.round((r.vol_ratio-1)*100)}%`, cls:'' });
-
-  // ── EMA alignment ──
-  if (r.ema200 && r.price>r.ema20 && r.ema20>r.ema50 && r.ema50>r.ema200) t.push({ label:'EMA Stack ▲', cls:'green' });
-  if (r.ema200 && r.price<r.ema20 && r.ema20<r.ema50 && r.ema50<r.ema200) t.push({ label:'EMA Stack ▼', cls:'red' });
-
-  // ── MACD ──
-  if (r.macd > r.macd_signal && r.macd_score >= 75) t.push({ label:'MACD Cross ▲', cls:'blue' });
-  if (r.macd < r.macd_signal && r.macd_score <= 30) t.push({ label:'MACD Cross ▼', cls:'red' });
-
-  // ── TV rating ──
-  if (r.tv_rating === 'Strong Buy')  t.push({ label:'TV: Strong Buy',  cls:'purple' });
-  if (r.tv_rating === 'Strong Sell') t.push({ label:'TV: Strong Sell', cls:'red' });
-
-  // ── Confidence ──
-  if (r.score >= 80) t.push({ label:'High Confidence', cls:'purple' });
+  // High confidence
+  if (r.score >= 80 && !t.some(x => x.label === 'High Confidence'))
+    t.push({ label:'High Confidence', cls:'purple' });
 
   return t;
 }
@@ -270,27 +253,29 @@ function exportCSV() {
   const rows = [...getFiltered()];
   if (!rows.length) { alert('No results to export.'); return; }
 
-  const headers = ['Symbol','Name','Score','Direction','TV Rating','Price','Change%',
-                   'RSI','MACD','EMA Trend','Volume Ratio','RS vs SPY','ATR',
-                   'Entry','Target','Stop','Sector','Patterns','Divergence','MTF Align','Data As Of'];
+  const headers = ['Symbol','Name','Score','Direction','Signal Type','Up Votes','Down Votes',
+                   'TV Rating','Price','Change%','RSI','ADX','MACD','EMA Trend',
+                   'Volume Ratio','ATR','Entry','Stop','Goal1','Goal2','Goal3','Sector',
+                   'Patterns','Divergence','HTF EMA','BB Squeeze','Data As Of'];
   const lines = [headers.join(',')];
 
   rows.forEach(r => {
-    const emaDir = r.ema200
-      ? (r.price>r.ema20&&r.ema20>r.ema50&&r.ema50>r.ema200 ? 'Full Bull'
-         : r.price<r.ema20&&r.ema20<r.ema50&&r.ema50<r.ema200 ? 'Full Bear' : 'Mixed')
-      : (r.price>r.ema20 ? 'Above EMA20' : 'Below EMA20');
+    const emaDir = r.price>r.ema20&&r.ema20>r.ema50 ? 'Bull'
+                 : r.price<r.ema20&&r.ema20<r.ema50 ? 'Bear' : 'Mixed';
     const row = [
       r.symbol,
       '"' + (r.name||'').replace(/"/g,'') + '"',
-      r.score, r.direction,
+      r.score, r.direction, r.signal_type||'',
+      r.up_votes||0, r.down_votes||0,
       r.tv_rating||'—', r.price, r.change_pct||0,
-      r.rsi, (r.macd>r.macd_signal?'Bull':'Bear'),
-      emaDir, r.vol_ratio, r.rs_20||'',
-      r.atr, r.entry, r.target, r.stop,
+      r.rsi, r.adx||0,
+      (r.macd>r.macd_signal?'Bull':'Bear'),
+      emaDir, r.vol_ratio,
+      r.atr, r.entry, r.stop||'', r.tp1||'', r.tp2||'', r.tp3||'',
       r.sector||'',
       '"' + (r.patterns||[]).join(';') + '"',
-      r.divergence||'', r.mtf_align||0,
+      r.divergence||'', r.htf_ema_dir||0,
+      r.bb_squeeze||0,
       r.last_candle||''
     ];
     lines.push(row.join(','));
@@ -303,149 +288,173 @@ function exportCSV() {
   a.click();
 }
 
-// ── Build Card ────────────────────────────────────────────────────────────
+// ── Build Card (Saudi scanner layout) ────────────────────────────────────
 function buildCard(r) {
   const dc    = r.direction==='Bullish'?'bull':r.direction==='Bearish'?'bear':'neutral';
-  const chgCl = r.change_pct>0?'bull':r.change_pct<0?'bear':'';
-  const chgS  = r.change_pct>0?'+':'';
+  const chgCl = (r.change_pct||0)>0?'bull':(r.change_pct||0)<0?'bear':'';
+  const chgS  = (r.change_pct||0)>0?'+':'';
   const isW   = watchedSet.has(r.symbol);
-  const atr   = r.atr||0;
+  const atr   = r.atr || 0;
+  const mult  = r.direction==='Bullish'?1:-1;
 
-  // Use backend AB.SK-style targets when available, else fallback to ATR calc
-  const mult = r.direction==='Bullish'?1:-1;
-  const t1   = r.tp1 != null ? r.tp1 : (atr ? (r.entry + mult*1.5*atr).toFixed(2) : '');
-  const t2   = r.tp2 != null ? r.tp2 : (atr ? (r.entry + mult*3.0*atr).toFixed(2) : '');
-  const t3   = r.tp3 != null ? r.tp3 : (atr ? (r.entry + mult*4.5*atr).toFixed(2) : '');
-  const stop = r.stop != null ? r.stop : (atr ? (r.entry - mult*atr).toFixed(2) : '');
-  const dist = t2 ? Math.abs(((parseFloat(t2)-r.entry)/r.entry)*100).toFixed(1) : '—';
+  // AB.SK targets: Stop=5×ATR, G1=2.5×ATR, G2=5×ATR, G3=7.5×ATR
+  const entry = r.entry || r.price;
+  const stop  = r.stop  != null ? r.stop  : (atr ? (entry - mult*5.0*atr).toFixed(4) : '');
+  const t1    = r.tp1   != null ? r.tp1   : (atr ? (entry + mult*2.5*atr).toFixed(4) : '');
+  const t2    = r.tp2   != null ? r.tp2   : (atr ? (entry + mult*5.0*atr).toFixed(4) : '');
+  const t3    = r.tp3   != null ? r.tp3   : (atr ? (entry + mult*7.5*atr).toFixed(4) : '');
+  const dist  = t2 ? Math.abs(((parseFloat(t2)-entry)/entry)*100).toFixed(2) : '—';
 
-  // Vote counts
-  const upV  = r.up_votes   || 0;
-  const dnV  = r.down_votes || 0;
-  const totV = upV + dnV || 1;
+  // Votes
+  const upV   = r.up_votes   || 0;
+  const dnV   = r.down_votes || 0;
+  const totV  = upV + dnV || 1;
   const upPct = Math.round(upV / totV * 100);
   const dnPct = 100 - upPct;
 
-  // Signal type badge
-  const stCls = r.signal_type === 'Trend' ? 'sig-trend'
-              : r.signal_type === 'Reversal' ? 'sig-reversal' : 'sig-mixed';
+  // EMA 1D direction
+  const ema1dBull = r.price > r.ema20 && r.ema20 > r.ema50;
+  const ema1dBear = r.price < r.ema20 && r.ema20 < r.ema50;
+  const ema1dCls  = ema1dBull ? 'bull' : ema1dBear ? 'bear' : '';
+  const ema1dLbl  = ema1dBull ? '↑ Bullish' : ema1dBear ? '↓ Bearish' : '↔ Mixed';
 
-  // ADX strength label
-  const adx = r.adx || 0;
-  const adxLbl = adx >= 40 ? 'Strong' : adx >= 25 ? 'Trending' : 'Weak';
-  const adxCls = adx >= 25 ? (r.adx_plus_di > r.adx_minus_di ? 'bull' : 'bear') : '';
+  // HTF EMA (1H) direction
+  const htfDir  = r.htf_ema_dir || r.mtf_align || 0;
+  const htfBull = htfDir > 0;
+  const htfBear = htfDir < 0;
+  const htfCls  = htfBull ? 'bull' : htfBear ? 'bear' : '';
+  const htfLbl  = htfBull ? '↑ Bullish' : htfBear ? '↓ Bearish' : '↔ Mixed';
+
+  // ADX
+  const adx    = r.adx || 0;
+  const adxDiCls = adx >= 25 ? ((r.adx_plus_di||0) > (r.adx_minus_di||0) ? 'bull' : 'bear') : '';
+  const adxLbl   = adx >= 40 ? 'Strong' : adx >= 25 ? 'Trending' : 'Weak';
+
+  // RSI level badge (high=RSI≥60, low=RSI<60)
+  const rsiHigh = r.rsi >= 60;
+  const rsiCls  = rsiHigh ? 'rsi-high' : 'rsi-low';
+  const rsiLbl  = rsiHigh ? 'High ✓' : 'Low';
+
+  // Trend direction badge
+  const trendLbl = r.direction === 'Bullish' ? 'Ascension' :
+                   r.direction === 'Bearish' ? 'Decline'   : 'Sideways';
 
   const patterns = getPatterns(r);
   const tvLink   = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.tv_symbol||r.symbol)}`;
 
   return `
 <div class="stock-card ${dc}${isW?' watched':''}" id="card_${r.symbol}">
-  <div class="card-top">
-    <div class="card-score-col">
-      <div class="card-score ${dc}">${r.score}</div>
-      <div class="card-dot ${dc}"></div>
+
+  <!-- ─── Header row: score + badges + price ─── -->
+  <div class="sk-header">
+    <span class="sk-score ${dc}">${r.score}</span>
+    <div class="sk-badges">
+      <span class="sk-dir-badge ${dc}">${r.direction}</span>
+      <span class="sector-tag">${r.sector||''}</span>
+      ${isW?'<span class="watched-chip">📌</span>':''}
     </div>
-    <div class="card-info-col">
-      <div class="card-badges">
-        <span class="signal-type-badge ${stCls}">${r.signal_type||'Mixed'}</span>
-        <span class="sector-tag">${r.sector||''}</span>
-        ${isW?'<span class="watched-chip">📌 Watching</span>':''}
-      </div>
-      <div class="card-sym-row">
-        <span class="card-sym">${r.symbol}</span>
-        <span class="card-status ${dc}"></span>
-        <span class="card-name">${r.name||''}</span>
-      </div>
-    </div>
-    <div class="card-top-right">
-      <span class="tv-badge ${r.tv_css||'tv-na'}">${r.tv_rating||'—'}</span>
-      <span class="change-pct ${chgCl}">${chgS}${r.change_pct}%</span>
+    <div class="sk-price-col">
+      <span class="sk-price">${r.price}</span>
+      <span class="card-dot ${dc}"></span>
     </div>
   </div>
 
-  <!-- Vote bar -->
-  <div class="vote-bar-wrap">
-    <div class="vote-count bull-v">▲ ${upV}</div>
-    <div class="vote-track">
-      <div class="vote-fill bull-fill" style="width:${upPct}%"></div>
-      <div class="vote-fill bear-fill" style="width:${dnPct}%"></div>
-    </div>
-    <div class="vote-count bear-v">▼ ${dnV}</div>
+  <!-- ─── Symbol row ─── -->
+  <div class="sk-sym-row">
+    <span class="card-sym">${r.symbol}</span>
+    <span class="card-name">${r.name||''}</span>
+    <a href="${tvLink}" target="_blank" rel="noopener" class="sk-check">Check ✓</a>
+  </div>
+
+  <!-- ─── Vote progress bar ─── -->
+  <div class="sk-vote-track">
+    <div class="vote-fill bull-fill" style="width:${upPct}%"></div>
+    <div class="vote-fill bear-fill" style="width:${dnPct}%"></div>
+  </div>
+
+  <!-- ─── Signal badges ─── -->
+  <div class="sk-signal-row">
+    <span class="sk-rsi-badge ${rsiCls}">${rsiLbl}</span>
+    <span class="sk-trend-badge ${dc}">${trendLbl} <span class="sk-dot ${dc}">●</span></span>
+    <span class="tv-badge ${r.tv_css||'tv-na'}">${r.tv_rating||'—'}</span>
+    <span class="change-pct ${chgCl}" style="margin-left:auto">${chgS}${r.change_pct||0}%</span>
   </div>
 
   <div class="card-sep"></div>
 
-  <div class="card-metrics">
-    <div class="cm">
-      <span class="cm-label">EMA Trend</span>
-      <span class="cm-val ${r.price>r.ema20&&r.ema20>r.ema50?'bull':r.price<r.ema20&&r.ema20<r.ema50?'bear':''}">${r.price>r.ema20&&r.ema20>r.ema50?'↑ Bullish':r.price<r.ema20&&r.ema20<r.ema50?'↓ Bearish':'↔ Mixed'}</span>
+  <!-- ─── 4 metrics: EMA 1D | EMA 1H | ADX | RSI ─── -->
+  <div class="sk-metrics">
+    <div class="sk-m">
+      <span class="sk-m-label">EMA ${lastTF.toUpperCase()}</span>
+      <span class="sk-m-val ${ema1dCls}">↑ ${ema1dLbl.replace('↑ ','').replace('↓ ','').replace('↔ ','')}</span>
     </div>
-    <div class="cm">
-      <span class="cm-label">RSI (14)</span>
-      <span class="cm-val ${r.rsi>60?'bull':r.rsi<40?'bear':''}">${r.rsi}</span>
+    <div class="sk-m">
+      <span class="sk-m-label">EMA 1H</span>
+      <span class="sk-m-val ${htfCls}">${htfLbl}</span>
     </div>
-    <div class="cm">
-      <span class="cm-label">MACD</span>
-      <span class="cm-val ${r.macd>r.macd_signal?'bull':'bear'}">${r.macd>r.macd_signal?'↑ Bull':'↓ Bear'}</span>
+    <div class="sk-m">
+      <span class="sk-m-label">ADX ${lastTF.toUpperCase()}: <b>${adx}</b></span>
+      <span class="sk-m-val ${adxDiCls}">${adxLbl}</span>
     </div>
-    <div class="cm">
-      <span class="cm-label">ADX (${adx})</span>
-      <span class="cm-val ${adxCls}">${adxLbl}</span>
+    <div class="sk-m">
+      <span class="sk-m-label">RSI ${lastTF.toUpperCase()}: <b>${r.rsi}</b></span>
+      <span class="sk-m-val ${r.rsi>=60?'bull':r.rsi<=40?'bear':''}">${r.rsi>=70?'Overbought':r.rsi>=55?'Bullish':r.rsi<=30?'Oversold':r.rsi<=45?'Bearish':'Neutral'}</span>
     </div>
   </div>
 
-  <div class="card-price-row">
-    <span class="cp-label">Price:</span>
-    <span class="cp-val">$${r.price.toLocaleString()}</span>
-    <span class="cp-change ${chgCl}">${chgS}${r.change_pct}%</span>
-    ${r.supertrend ? `<span class="st-badge ${r.supertrend_dir===1?'bull':'bear'}">ST ${r.supertrend_dir===1?'▲':'▼'}</span>` : ''}
+  <!-- ─── Current price ─── -->
+  <div class="sk-price-row">
+    <span class="cp-label">Current Price:</span>
+    <span class="cp-val">$${(r.price||0).toLocaleString()}</span>
+    ${r.supertrend ? `<span class="st-badge ${r.supertrend_dir===1?'bull':'bear'} ml-auto">ST ${r.supertrend_dir===1?'▲':'▼'} ${r.supertrend}</span>` : ''}
   </div>
 
-  <div class="card-targets">
-    <div class="ct-row">
-      <div class="ct-field">
-        <div class="ct-label">✓ Entry</div>
-        <input class="ct-input" id="en_${r.symbol}" value="${r.entry}">
+  <!-- ─── Entry & Objectives AB.SK ─── -->
+  <div class="sk-objectives">
+    <div class="sk-obj-hdr">✓ Entry &amp; Objectives AB.SK</div>
+    <div class="sk-obj-row2">
+      <div class="sk-obj-field">
+        <div class="sk-obj-lbl red-lbl">Stop Loss ●</div>
+        <input class="sk-obj-input stop-inp" id="sl_${r.symbol}" value="${stop}">
       </div>
-      <div class="ct-field">
-        <div class="ct-label red">● Stop</div>
-        <input class="ct-input red-i" id="sl_${r.symbol}" value="${stop}" placeholder="—">
-      </div>
-      <button class="ct-calc-btn" onclick="calcTargets('${r.symbol}',${atr},'${r.direction}')">
-        Calc ↗
-      </button>
-    </div>
-    <div class="ct-row">
-      <div class="ct-field">
-        <div class="ct-label green">TP1</div>
-        <input class="ct-input green-i" id="t1_${r.symbol}" value="${t1}" placeholder="—" readonly>
-      </div>
-      <div class="ct-field">
-        <div class="ct-label green">TP2</div>
-        <input class="ct-input green-i" id="t2_${r.symbol}" value="${t2}" placeholder="—" readonly>
-      </div>
-      <div class="ct-field">
-        <div class="ct-label green">TP3</div>
-        <input class="ct-input green-i" id="t3_${r.symbol}" value="${t3}" placeholder="—" readonly>
+      <div class="sk-obj-field">
+        <div class="sk-obj-lbl">Entry Price ♦</div>
+        <input class="sk-obj-input" id="en_${r.symbol}" value="${entry}">
       </div>
     </div>
-    <div class="ct-atr">ATR: $${r.atr} &nbsp;|&nbsp; R/R: 1:${r.rr||2} &nbsp;|&nbsp; Dist: ${dist}%</div>
+    <div class="sk-obj-row3">
+      <div class="sk-obj-field">
+        <div class="sk-obj-lbl green-lbl">Goal 3 🎯</div>
+        <input class="sk-obj-input goal-inp" id="t3_${r.symbol}" value="${t3}" readonly>
+      </div>
+      <div class="sk-obj-field">
+        <div class="sk-obj-lbl green-lbl">Goal 2 🎯</div>
+        <input class="sk-obj-input goal-inp" id="t2_${r.symbol}" value="${t2}" readonly>
+      </div>
+      <div class="sk-obj-field">
+        <div class="sk-obj-lbl green-lbl">Goal 1 🎯</div>
+        <input class="sk-obj-input goal-inp" id="t1_${r.symbol}" value="${t1}" readonly>
+      </div>
+    </div>
+    <div class="sk-obj-stats">Distance: ${dist}% | ATR: ${r.atr}</div>
   </div>
 
-  <div class="card-patterns">
+  <!-- ─── Patterns + Agree ─── -->
+  <div class="sk-patterns">
     ${patterns.map(p=>`<span class="pattern-tag ${p.cls}">${p.label}</span>`).join('')}
+    <div class="sk-agree">Agree: ${r.last_candle||'—'} (${upV} indicators) ↺</div>
   </div>
 
+  <!-- ─── Footer ─── -->
   <div class="card-footer">
-    <span class="cf-time">⏱ ${r.last_candle||'—'}</span>
-    <div class="cf-actions">
-      <a href="${tvLink}" target="_blank" rel="noopener" class="cf-btn chart-btn" title="Open chart in TradingView">📊 Chart</a>
-      <button class="cf-btn${isW?' watch-active':''}" onclick="toggleWatch('${r.symbol}')" title="Watch">
-        ${isW?'📌':'👁'} Watch
-      </button>
-      <button class="cf-btn danger" onclick="dismissCard('${r.symbol}')" title="Dismiss">✕</button>
-    </div>
+    <button class="cf-btn danger" onclick="dismissCard('${r.symbol}')" title="Dismiss">✕</button>
+    <a href="${tvLink}" target="_blank" rel="noopener" class="cf-btn chart-btn">Details ▼</a>
+    <button class="cf-btn${isW?' watch-active':''}" onclick="toggleWatch('${r.symbol}')">
+      ${isW?'📌 Watching':'Scan ⊘'}
+    </button>
+    <span class="sk-votes">${dnV}↓ | ${upV}↑</span>
   </div>
+
 </div>`;
 }
 
@@ -454,11 +463,12 @@ function calcTargets(symbol, atr, direction) {
   const entry = parseFloat(document.getElementById(`en_${symbol}`)?.value);
   if (!entry || !atr) return;
   const m = direction === 'Bullish' ? 1 : -1;
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v.toFixed(2); };
-  set(`sl_${symbol}`, entry - m * 1.0 * atr);
-  set(`t1_${symbol}`, entry + m * 1.5 * atr);
-  set(`t2_${symbol}`, entry + m * 3.0 * atr);
-  set(`t3_${symbol}`, entry + m * 4.5 * atr);
+  // AB.SK formula: Stop=5×ATR, G1=2.5×ATR, G2=5×ATR, G3=7.5×ATR
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v.toFixed(4); };
+  set(`sl_${symbol}`, entry - m * 5.0 * atr);
+  set(`t1_${symbol}`, entry + m * 2.5 * atr);
+  set(`t2_${symbol}`, entry + m * 5.0 * atr);
+  set(`t3_${symbol}`, entry + m * 7.5 * atr);
 
   watchedSet.add(symbol);
   document.getElementById(`card_${symbol}`)?.classList.add('watched');

@@ -162,7 +162,7 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 .feat          { background: var(--bg2); border: 1px solid var(--border2); padding: 7px 14px; border-radius: 20px; font-size: 0.78rem; color: var(--text2); }
 
 /* ════════════════════════════════════════════════════════
-   Stock Card
+   Stock Card  (Saudi scanner layout)
 ════════════════════════════════════════════════════════ */
 .stock-card {
   background: var(--bg2);
@@ -173,126 +173,130 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
   animation: card-in .25s ease;
 }
 @keyframes card-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
-.stock-card:hover  { border-color: #3a3a60; }
-.stock-card.bull   { border-left: 3px solid var(--green); }
-.stock-card.bear   { border-left: 3px solid var(--red); }
+.stock-card:hover   { border-color: #3a3a60; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+.stock-card.bull    { border-left: 3px solid var(--green); }
+.stock-card.bear    { border-left: 3px solid var(--red); }
 .stock-card.watched { border-color: var(--orange); border-width: 2px; box-shadow: 0 0 16px rgba(255,152,0,.15); }
 
-/* Card Top */
-.card-top      { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px 10px; }
-.card-score-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
-.card-score    { font-size: 1.8rem; font-weight: 900; line-height: 1; }
-.card-score.bull { color: var(--green); }
-.card-score.bear { color: var(--red); }
-.card-dot      { width: 10px; height: 10px; border-radius: 50%; }
-.card-dot.bull { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.card-dot.bear { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+/* ── Card dots ── */
+.card-dot         { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.card-dot.bull    { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.card-dot.bear    { background: var(--red);   box-shadow: 0 0 6px var(--red); }
 .card-dot.neutral { background: var(--text3); }
 
-.card-info-col { flex: 1; min-width: 0; }
-.card-badges   { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; align-items: center; }
-.scan-type-tag { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: rgba(179,136,255,.15); color: var(--purple); border: 1px solid rgba(179,136,255,.25); }
-.sector-tag    { font-size: 0.65rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: rgba(68,138,255,.1); color: var(--blue); border: 1px solid rgba(68,138,255,.2); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.card-sym-row  { display: flex; align-items: center; gap: 6px; }
-.card-sym      { font-size: 1rem; font-weight: 800; color: #fff; letter-spacing: 0.3px; }
-.card-status   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.card-status.bull { background: var(--green); }
-.card-status.bear { background: var(--red); }
-.card-name     { font-size: 0.75rem; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
-
-.watched-chip  { font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; background: rgba(255,152,0,.15); color: var(--orange); border: 1px solid rgba(255,152,0,.3); }
-
-/* Signal type badge */
-.signal-type-badge { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
-.sig-trend    { background: rgba(0,230,118,.12);  color: var(--green);  border: 1px solid rgba(0,230,118,.3); }
-.sig-reversal { background: rgba(255,152,0,.12);  color: var(--orange); border: 1px solid rgba(255,152,0,.3); }
-.sig-mixed    { background: rgba(80,80,128,.15);  color: var(--text2);  border: 1px solid var(--border2); }
-
-.card-top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
-.tv-badge      { font-size: 0.68rem; font-weight: 700; padding: 3px 8px; border-radius: 8px; white-space: nowrap; }
+/* ── Shared small badges ── */
+.sector-tag     { font-size: 0.65rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: rgba(68,138,255,.1); color: var(--blue); border: 1px solid rgba(68,138,255,.2); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watched-chip   { font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; background: rgba(255,152,0,.15); color: var(--orange); border: 1px solid rgba(255,152,0,.3); }
+.tv-badge       { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 8px; white-space: nowrap; }
 .tv-strong-buy  { color: #00e676; background: rgba(0,230,118,.15); border: 1px solid rgba(0,230,118,.3); }
 .tv-buy         { color: #69f0ae; background: rgba(105,240,174,.12); border: 1px solid rgba(105,240,174,.25); }
 .tv-neutral     { color: var(--text2); background: rgba(80,80,128,.15); border: 1px solid var(--border2); }
 .tv-sell        { color: #ff6d6d; background: rgba(255,109,109,.12); border: 1px solid rgba(255,109,109,.25); }
 .tv-strong-sell { color: var(--red); background: rgba(255,23,68,.15); border: 1px solid rgba(255,23,68,.3); }
 .tv-na          { color: var(--text3); background: transparent; border: 1px solid var(--border); }
-
-.change-pct    { font-size: 0.75rem; font-weight: 700; }
+.change-pct     { font-size: 0.75rem; font-weight: 700; }
 .change-pct.bull { color: var(--green); }
 .change-pct.bear { color: var(--red); }
 
-/* Vote bar */
-.vote-bar-wrap { display: flex; align-items: center; gap: 8px; padding: 6px 14px 4px; }
-.vote-count    { font-size: 0.72rem; font-weight: 800; min-width: 30px; }
-.bull-v        { color: var(--green); }
-.bear-v        { color: var(--red); text-align: right; }
-.vote-track    { flex: 1; height: 6px; border-radius: 3px; background: var(--border2); overflow: hidden; display: flex; }
-.vote-fill     { height: 100%; transition: width .4s ease; }
-.bull-fill     { background: var(--green); border-radius: 3px 0 0 3px; }
-.bear-fill     { background: var(--red);   border-radius: 0 3px 3px 0; }
+/* ── Header row ── */
+.sk-header      { display: flex; align-items: center; gap: 8px; padding: 10px 14px 6px; }
+.sk-score       { font-size: 1.7rem; font-weight: 900; line-height: 1; flex-shrink: 0; min-width: 38px; }
+.sk-score.bull  { color: var(--green); }
+.sk-score.bear  { color: var(--red); }
+.sk-score.neutral { color: var(--text2); }
+.sk-badges      { display: flex; align-items: center; gap: 5px; flex: 1; flex-wrap: wrap; }
+.sk-dir-badge   { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.sk-dir-badge.bull { background: rgba(0,230,118,.12); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
+.sk-dir-badge.bear { background: rgba(255,23,68,.1);  color: var(--red);   border: 1px solid rgba(255,23,68,.25); }
+.sk-dir-badge.neutral { background: rgba(80,80,128,.15); color: var(--text2); border: 1px solid var(--border2); }
+.sk-price-col   { display: flex; align-items: center; gap: 5px; margin-left: auto; flex-shrink: 0; }
+.sk-price       { font-size: 0.88rem; font-weight: 800; color: #fff; }
 
-/* SuperTrend badge on price row */
-.st-badge      { font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; margin-left: auto; }
-.st-badge.bull { background: rgba(0,230,118,.12); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
-.st-badge.bear { background: rgba(255,23,68,.1);  color: var(--red);   border: 1px solid rgba(255,23,68,.25); }
+/* ── Symbol row ── */
+.sk-sym-row     { display: flex; align-items: center; gap: 8px; padding: 2px 14px 6px; }
+.card-sym       { font-size: 1rem; font-weight: 800; color: #fff; letter-spacing: 0.3px; flex-shrink: 0; }
+.card-name      { font-size: 0.72rem; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.sk-check       { font-size: 0.7rem; font-weight: 700; color: var(--green); text-decoration: none; white-space: nowrap; flex-shrink: 0; opacity: .8; }
+.sk-check:hover { opacity: 1; text-decoration: underline; }
 
-/* Card Sep */
-.card-sep      { height: 1px; background: var(--border); margin: 0 14px; }
+/* ── Vote progress bar ── */
+.sk-vote-track  { height: 5px; margin: 0 14px 6px; border-radius: 3px; background: var(--border2); overflow: hidden; display: flex; }
+.vote-fill      { height: 100%; transition: width .4s ease; }
+.bull-fill      { background: var(--green); }
+.bear-fill      { background: var(--red); }
 
-/* Card Metrics */
-.card-metrics  { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 10px 14px; }
-.cm            { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
-.cm:nth-child(odd)  { border-right: 1px solid var(--border); padding-right: 10px; }
-.cm:nth-child(even) { padding-left: 10px; }
-.cm-label      { font-size: 0.65rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; }
-.cm-val        { font-size: 0.82rem; font-weight: 700; }
-.cm-val.bull   { color: var(--green); }
-.cm-val.bear   { color: var(--red); }
+/* ── Signal row: RSI badge + trend badge + TV rating + change ── */
+.sk-signal-row  { display: flex; align-items: center; gap: 6px; padding: 4px 14px; flex-wrap: wrap; }
+.sk-rsi-badge   { font-size: 0.65rem; font-weight: 700; padding: 3px 10px; border-radius: 16px; white-space: nowrap; }
+.rsi-high       { background: rgba(0,230,118,.12); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
+.rsi-low        { background: rgba(179,136,255,.12); color: var(--purple); border: 1px solid rgba(179,136,255,.25); }
+.sk-trend-badge { font-size: 0.65rem; font-weight: 700; padding: 3px 10px; border-radius: 16px; white-space: nowrap; }
+.sk-trend-badge.bull { background: rgba(0,230,118,.08);  color: var(--green);  border: 1px solid rgba(0,230,118,.2); }
+.sk-trend-badge.bear { background: rgba(255,23,68,.08);  color: var(--red);    border: 1px solid rgba(255,23,68,.2); }
+.sk-trend-badge.neutral { background: rgba(80,80,128,.12); color: var(--text2); border: 1px solid var(--border2); }
+.sk-dot         { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+.sk-dot.bull    { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.sk-dot.bear    { background: var(--red); }
+.ml-auto        { margin-left: auto; }
 
-/* Card Price */
-.card-price-row { padding: 8px 14px; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.02); }
-.cp-label      { font-size: 0.7rem; color: var(--text3); flex-shrink: 0; }
-.cp-val        { font-size: 1.05rem; font-weight: 800; color: #fff; }
-.cp-change     { font-size: 0.78rem; font-weight: 700; }
-.cp-change.bull { color: var(--green); }
-.cp-change.bear { color: var(--red); }
+/* ── Card Sep ── */
+.card-sep       { height: 1px; background: var(--border); margin: 0 14px; }
 
-/* Card Targets */
-.card-targets  { padding: 10px 14px; border-top: 1px solid var(--border); }
-.ct-row        { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
-.ct-row:last-child { margin-bottom: 0; }
-.ct-field      { display: flex; flex-direction: column; gap: 3px; flex: 1; }
-.ct-label      { font-size: 0.65rem; color: var(--text2); font-weight: 600; white-space: nowrap; }
-.ct-label.red  { color: var(--red); }
-.ct-label.green { color: var(--green); }
-.ct-input      { background: var(--bg3); border: 1px solid var(--border2); color: var(--text); border-radius: var(--r-sm); padding: 5px 8px; font-size: 0.8rem; font-weight: 600; outline: none; width: 100%; transition: border-color .15s; text-align: center; }
-.ct-input:focus { border-color: var(--blue); }
-.ct-input.red-i  { border-color: rgba(255,23,68,.3); }
-.ct-input.red-i:focus { border-color: var(--red); }
-.ct-input.green-i { border-color: rgba(0,230,118,.3); }
-.ct-input.green-i:focus { border-color: var(--green); }
-.ct-calc-btn   { background: rgba(68,138,255,.15); border: 1px solid rgba(68,138,255,.3); color: var(--blue); padding: 5px 12px; border-radius: var(--r-sm); cursor: pointer; font-size: 0.75rem; font-weight: 700; white-space: nowrap; transition: all .15s; align-self: flex-end; }
-.ct-calc-btn:hover { background: rgba(68,138,255,.25); }
-.ct-atr        { font-size: 0.65rem; color: var(--text3); margin-top: 6px; }
+/* ── Metrics grid 2×2 ── */
+.sk-metrics     { display: grid; grid-template-columns: 1fr 1fr; padding: 8px 14px; gap: 0; }
+.sk-m           { display: flex; flex-direction: column; gap: 2px; padding: 5px 0; }
+.sk-m:nth-child(odd)  { border-right: 1px solid var(--border); padding-right: 10px; }
+.sk-m:nth-child(even) { padding-left: 10px; }
+.sk-m-label     { font-size: 0.63rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.sk-m-label b   { color: var(--text2); font-weight: 700; }
+.sk-m-val       { font-size: 0.82rem; font-weight: 700; color: var(--text2); }
+.sk-m-val.bull  { color: var(--green); }
+.sk-m-val.bear  { color: var(--red); }
 
-/* Pattern Tags */
-.card-patterns { padding: 8px 14px; display: flex; flex-wrap: wrap; gap: 5px; border-top: 1px solid var(--border); min-height: 38px; }
-.pattern-tag   { font-size: 0.65rem; font-weight: 600; padding: 3px 9px; border-radius: 8px; background: rgba(255,215,64,.08); color: var(--yellow); border: 1px solid rgba(255,215,64,.2); white-space: nowrap; }
-.pattern-tag.blue  { background: rgba(68,138,255,.1); color: var(--blue); border-color: rgba(68,138,255,.25); }
-.pattern-tag.green { background: rgba(0,230,118,.08); color: var(--green); border-color: rgba(0,230,118,.2); }
-.pattern-tag.red   { background: rgba(255,23,68,.08); color: var(--red); border-color: rgba(255,23,68,.2); }
-.pattern-tag.purple { background: rgba(179,136,255,.1); color: var(--purple); border-color: rgba(179,136,255,.25); }
+/* ── Current price row ── */
+.sk-price-row   { padding: 7px 14px; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.02); }
+.cp-label       { font-size: 0.7rem; color: var(--text3); flex-shrink: 0; }
+.cp-val         { font-size: 1.05rem; font-weight: 800; color: #fff; }
+.st-badge       { font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; }
+.st-badge.bull  { background: rgba(0,230,118,.12); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
+.st-badge.bear  { background: rgba(255,23,68,.1);  color: var(--red);   border: 1px solid rgba(255,23,68,.25); }
 
-/* Card Footer */
-.card-footer   { padding: 8px 14px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,.15); }
-.cf-time       { font-size: 0.65rem; color: var(--text3); }
-.cf-actions    { display: flex; gap: 6px; }
-.cf-btn        { background: var(--bg3); border: 1px solid var(--border2); color: var(--text2); padding: 4px 10px; border-radius: var(--r-sm); cursor: pointer; font-size: 0.72rem; transition: all .15s; }
-.cf-btn:hover  { border-color: var(--blue); color: var(--text); }
+/* ── Entry & Objectives AB.SK ── */
+.sk-objectives  { padding: 10px 14px; border-top: 1px solid var(--border); }
+.sk-obj-hdr     { font-size: 0.72rem; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.sk-obj-hdr::after { content: ''; flex: 1; height: 1px; background: var(--border2); margin-left: 4px; }
+.sk-obj-row2, .sk-obj-row3 { display: flex; gap: 8px; margin-bottom: 8px; }
+.sk-obj-row3    { margin-bottom: 0; }
+.sk-obj-field   { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.sk-obj-lbl     { font-size: 0.62rem; font-weight: 700; color: var(--text2); white-space: nowrap; }
+.red-lbl        { color: var(--red); }
+.green-lbl      { color: var(--green); }
+.sk-obj-input   { background: var(--bg3); border: 1px solid var(--border2); color: var(--text); border-radius: var(--r-sm); padding: 5px 6px; font-size: 0.78rem; font-weight: 600; outline: none; width: 100%; text-align: center; transition: border-color .15s; }
+.sk-obj-input:focus { border-color: var(--blue); }
+.stop-inp       { border-color: rgba(255,23,68,.3); }
+.stop-inp:focus { border-color: var(--red); }
+.goal-inp       { border-color: rgba(0,230,118,.25); }
+.goal-inp:focus { border-color: var(--green); }
+.sk-obj-stats   { font-size: 0.64rem; color: var(--text3); margin-top: 7px; }
+
+/* ── Patterns + Agree row ── */
+.sk-patterns    { padding: 8px 14px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 5px; align-items: flex-start; min-height: 32px; }
+.pattern-tag    { font-size: 0.64rem; font-weight: 600; padding: 3px 9px; border-radius: 8px; background: rgba(255,215,64,.08); color: var(--yellow); border: 1px solid rgba(255,215,64,.2); white-space: nowrap; }
+.pattern-tag.blue   { background: rgba(68,138,255,.1);   color: var(--blue);   border-color: rgba(68,138,255,.25); }
+.pattern-tag.green  { background: rgba(0,230,118,.08);   color: var(--green);  border-color: rgba(0,230,118,.2); }
+.pattern-tag.red    { background: rgba(255,23,68,.08);   color: var(--red);    border-color: rgba(255,23,68,.2); }
+.pattern-tag.purple { background: rgba(179,136,255,.1);  color: var(--purple); border-color: rgba(179,136,255,.25); }
+.sk-agree       { width: 100%; font-size: 0.62rem; color: var(--text3); margin-top: 3px; }
+
+/* ── Card Footer ── */
+.card-footer    { padding: 8px 14px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.12); }
+.cf-btn         { background: var(--bg3); border: 1px solid var(--border2); color: var(--text2); padding: 4px 10px; border-radius: var(--r-sm); cursor: pointer; font-size: 0.72rem; transition: all .15s; text-decoration: none; display: inline-flex; align-items: center; }
+.cf-btn:hover   { border-color: var(--blue); color: var(--text); }
 .cf-btn.danger:hover { border-color: var(--red); color: var(--red); }
 .cf-btn.watch-active { color: var(--orange); border-color: rgba(255,152,0,.4); background: rgba(255,152,0,.08); }
-.cf-btn.chart-btn  { color: var(--blue); }
+.cf-btn.chart-btn    { color: var(--blue); }
+.sk-votes       { margin-left: auto; font-size: 0.75rem; font-weight: 800; color: var(--text2); white-space: nowrap; }
+.sk-votes       { background: var(--bg3); border: 1px solid var(--border2); padding: 3px 10px; border-radius: 12px; }
 
 /* ════════════════════════════════════════════════════════
    Sidebar
