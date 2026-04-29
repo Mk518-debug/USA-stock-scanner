@@ -309,13 +309,31 @@ function buildCard(r) {
   const chgCl = r.change_pct>0?'bull':r.change_pct<0?'bear':'';
   const chgS  = r.change_pct>0?'+':'';
   const isW   = watchedSet.has(r.symbol);
-  const mult  = r.direction==='Bullish'?1:-1;
   const atr   = r.atr||0;
-  const t1    = atr ? (r.entry + mult*1.0*atr).toFixed(2) : '';
-  const t2    = atr ? (r.entry + mult*2.0*atr).toFixed(2) : '';
-  const t3    = atr ? (r.entry + mult*3.0*atr).toFixed(2) : '';
-  const stop  = atr ? (r.entry - mult*0.8*atr).toFixed(2) : '';
-  const dist  = t2  ? Math.abs(((parseFloat(t2)-r.entry)/r.entry)*100).toFixed(1) : '—';
+
+  // Use backend AB.SK-style targets when available, else fallback to ATR calc
+  const mult = r.direction==='Bullish'?1:-1;
+  const t1   = r.tp1 != null ? r.tp1 : (atr ? (r.entry + mult*1.5*atr).toFixed(2) : '');
+  const t2   = r.tp2 != null ? r.tp2 : (atr ? (r.entry + mult*3.0*atr).toFixed(2) : '');
+  const t3   = r.tp3 != null ? r.tp3 : (atr ? (r.entry + mult*4.5*atr).toFixed(2) : '');
+  const stop = r.stop != null ? r.stop : (atr ? (r.entry - mult*atr).toFixed(2) : '');
+  const dist = t2 ? Math.abs(((parseFloat(t2)-r.entry)/r.entry)*100).toFixed(1) : '—';
+
+  // Vote counts
+  const upV  = r.up_votes   || 0;
+  const dnV  = r.down_votes || 0;
+  const totV = upV + dnV || 1;
+  const upPct = Math.round(upV / totV * 100);
+  const dnPct = 100 - upPct;
+
+  // Signal type badge
+  const stCls = r.signal_type === 'Trend' ? 'sig-trend'
+              : r.signal_type === 'Reversal' ? 'sig-reversal' : 'sig-mixed';
+
+  // ADX strength label
+  const adx = r.adx || 0;
+  const adxLbl = adx >= 40 ? 'Strong' : adx >= 25 ? 'Trending' : 'Weak';
+  const adxCls = adx >= 25 ? (r.adx_plus_di > r.adx_minus_di ? 'bull' : 'bear') : '';
 
   const patterns = getPatterns(r);
   const tvLink   = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.tv_symbol||r.symbol)}`;
@@ -329,7 +347,7 @@ function buildCard(r) {
     </div>
     <div class="card-info-col">
       <div class="card-badges">
-        <span class="scan-type-tag">${scanType.charAt(0).toUpperCase()+scanType.slice(1)}</span>
+        <span class="signal-type-badge ${stCls}">${r.signal_type||'Mixed'}</span>
         <span class="sector-tag">${r.sector||''}</span>
         ${isW?'<span class="watched-chip">📌 Watching</span>':''}
       </div>
@@ -345,62 +363,73 @@ function buildCard(r) {
     </div>
   </div>
 
+  <!-- Vote bar -->
+  <div class="vote-bar-wrap">
+    <div class="vote-count bull-v">▲ ${upV}</div>
+    <div class="vote-track">
+      <div class="vote-fill bull-fill" style="width:${upPct}%"></div>
+      <div class="vote-fill bear-fill" style="width:${dnPct}%"></div>
+    </div>
+    <div class="vote-count bear-v">▼ ${dnV}</div>
+  </div>
+
   <div class="card-sep"></div>
 
   <div class="card-metrics">
     <div class="cm">
-      <span class="cm-label">EMA 20</span>
-      <span class="cm-val ${r.price>r.ema20?'bull':'bear'}">${r.price>r.ema20?'↑ Above':'↓ Below'}</span>
+      <span class="cm-label">EMA Trend</span>
+      <span class="cm-val ${r.price>r.ema20&&r.ema20>r.ema50?'bull':r.price<r.ema20&&r.ema20<r.ema50?'bear':''}">${r.price>r.ema20&&r.ema20>r.ema50?'↑ Bullish':r.price<r.ema20&&r.ema20<r.ema50?'↓ Bearish':'↔ Mixed'}</span>
     </div>
     <div class="cm">
-      <span class="cm-label">EMA 50</span>
-      <span class="cm-val ${r.ema20>r.ema50?'bull':'bear'}">${r.ema20>r.ema50?'↑ Bull':'↓ Bear'}</span>
-    </div>
-    <div class="cm">
-      <span class="cm-label">RSI</span>
+      <span class="cm-label">RSI (14)</span>
       <span class="cm-val ${r.rsi>60?'bull':r.rsi<40?'bear':''}">${r.rsi}</span>
     </div>
     <div class="cm">
       <span class="cm-label">MACD</span>
       <span class="cm-val ${r.macd>r.macd_signal?'bull':'bear'}">${r.macd>r.macd_signal?'↑ Bull':'↓ Bear'}</span>
     </div>
+    <div class="cm">
+      <span class="cm-label">ADX (${adx})</span>
+      <span class="cm-val ${adxCls}">${adxLbl}</span>
+    </div>
   </div>
 
   <div class="card-price-row">
-    <span class="cp-label">Current Price:</span>
+    <span class="cp-label">Price:</span>
     <span class="cp-val">$${r.price.toLocaleString()}</span>
     <span class="cp-change ${chgCl}">${chgS}${r.change_pct}%</span>
+    ${r.supertrend ? `<span class="st-badge ${r.supertrend_dir===1?'bull':'bear'}">ST ${r.supertrend_dir===1?'▲':'▼'}</span>` : ''}
   </div>
 
   <div class="card-targets">
     <div class="ct-row">
       <div class="ct-field">
-        <div class="ct-label">✓ Entry Price</div>
+        <div class="ct-label">✓ Entry</div>
         <input class="ct-input" id="en_${r.symbol}" value="${r.entry}">
       </div>
       <div class="ct-field">
-        <div class="ct-label red">● Stop Loss</div>
+        <div class="ct-label red">● Stop</div>
         <input class="ct-input red-i" id="sl_${r.symbol}" value="${stop}" placeholder="—">
       </div>
       <button class="ct-calc-btn" onclick="calcTargets('${r.symbol}',${atr},'${r.direction}')">
-        Calculate ↗
+        Calc ↗
       </button>
     </div>
     <div class="ct-row">
       <div class="ct-field">
-        <div class="ct-label green">🎯 Target 1</div>
+        <div class="ct-label green">TP1</div>
         <input class="ct-input green-i" id="t1_${r.symbol}" value="${t1}" placeholder="—" readonly>
       </div>
       <div class="ct-field">
-        <div class="ct-label green">🎯 Target 2</div>
+        <div class="ct-label green">TP2</div>
         <input class="ct-input green-i" id="t2_${r.symbol}" value="${t2}" placeholder="—" readonly>
       </div>
       <div class="ct-field">
-        <div class="ct-label green">🎯 Target 3</div>
+        <div class="ct-label green">TP3</div>
         <input class="ct-input green-i" id="t3_${r.symbol}" value="${t3}" placeholder="—" readonly>
       </div>
     </div>
-    <div class="ct-atr">ATR: $${r.atr} &nbsp;|&nbsp; R/R: 1:2 &nbsp;|&nbsp; Distance: ${dist}%</div>
+    <div class="ct-atr">ATR: $${r.atr} &nbsp;|&nbsp; R/R: 1:${r.rr||2} &nbsp;|&nbsp; Dist: ${dist}%</div>
   </div>
 
   <div class="card-patterns">
@@ -426,10 +455,10 @@ function calcTargets(symbol, atr, direction) {
   if (!entry || !atr) return;
   const m = direction === 'Bullish' ? 1 : -1;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v.toFixed(2); };
-  set(`sl_${symbol}`, entry - m * 0.8 * atr);
-  set(`t1_${symbol}`, entry + m * 1.0 * atr);
-  set(`t2_${symbol}`, entry + m * 2.0 * atr);
-  set(`t3_${symbol}`, entry + m * 3.0 * atr);
+  set(`sl_${symbol}`, entry - m * 1.0 * atr);
+  set(`t1_${symbol}`, entry + m * 1.5 * atr);
+  set(`t2_${symbol}`, entry + m * 3.0 * atr);
+  set(`t3_${symbol}`, entry + m * 4.5 * atr);
 
   watchedSet.add(symbol);
   document.getElementById(`card_${symbol}`)?.classList.add('watched');

@@ -203,6 +203,12 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 
 .watched-chip  { font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; background: rgba(255,152,0,.15); color: var(--orange); border: 1px solid rgba(255,152,0,.3); }
 
+/* Signal type badge */
+.signal-type-badge { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.sig-trend    { background: rgba(0,230,118,.12);  color: var(--green);  border: 1px solid rgba(0,230,118,.3); }
+.sig-reversal { background: rgba(255,152,0,.12);  color: var(--orange); border: 1px solid rgba(255,152,0,.3); }
+.sig-mixed    { background: rgba(80,80,128,.15);  color: var(--text2);  border: 1px solid var(--border2); }
+
 .card-top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .tv-badge      { font-size: 0.68rem; font-weight: 700; padding: 3px 8px; border-radius: 8px; white-space: nowrap; }
 .tv-strong-buy  { color: #00e676; background: rgba(0,230,118,.15); border: 1px solid rgba(0,230,118,.3); }
@@ -215,6 +221,21 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 .change-pct    { font-size: 0.75rem; font-weight: 700; }
 .change-pct.bull { color: var(--green); }
 .change-pct.bear { color: var(--red); }
+
+/* Vote bar */
+.vote-bar-wrap { display: flex; align-items: center; gap: 8px; padding: 6px 14px 4px; }
+.vote-count    { font-size: 0.72rem; font-weight: 800; min-width: 30px; }
+.bull-v        { color: var(--green); }
+.bear-v        { color: var(--red); text-align: right; }
+.vote-track    { flex: 1; height: 6px; border-radius: 3px; background: var(--border2); overflow: hidden; display: flex; }
+.vote-fill     { height: 100%; transition: width .4s ease; }
+.bull-fill     { background: var(--green); border-radius: 3px 0 0 3px; }
+.bear-fill     { background: var(--red);   border-radius: 0 3px 3px 0; }
+
+/* SuperTrend badge on price row */
+.st-badge      { font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; margin-left: auto; }
+.st-badge.bull { background: rgba(0,230,118,.12); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
+.st-badge.bear { background: rgba(255,23,68,.1);  color: var(--red);   border: 1px solid rgba(255,23,68,.25); }
 
 /* Card Sep */
 .card-sep      { height: 1px; background: var(--border); margin: 0 14px; }

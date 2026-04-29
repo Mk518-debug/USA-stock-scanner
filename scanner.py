@@ -7,16 +7,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core_regime import market_regime_score
 
-# ── Issue #1: Per-timeframe composite weights ─────────────────────────────
-# EMA matters more on daily; momentum (MACD/RSI) matters more on intraday
+# ── Per-timeframe composite weights ──────────────────────────────────────────
 _WEIGHTS = {
-    '1d':  {'ema': 0.40, 'macd': 0.25, 'rsi': 0.15, 'vol': 0.10, 'regime': 0.10},
-    '4h':  {'ema': 0.30, 'macd': 0.30, 'rsi': 0.20, 'vol': 0.10, 'regime': 0.10},
-    '1h':  {'ema': 0.25, 'macd': 0.30, 'rsi': 0.25, 'vol': 0.15, 'regime': 0.05},
-    '15m': {'ema': 0.15, 'macd': 0.30, 'rsi': 0.30, 'vol': 0.20, 'regime': 0.05},
+    '1d':  {'ema': 0.35, 'macd': 0.20, 'rsi': 0.15, 'vol': 0.10, 'regime': 0.10, 'st': 0.10},
+    '4h':  {'ema': 0.25, 'macd': 0.25, 'rsi': 0.20, 'vol': 0.10, 'regime': 0.10, 'st': 0.10},
+    '1h':  {'ema': 0.20, 'macd': 0.25, 'rsi': 0.25, 'vol': 0.15, 'regime': 0.05, 'st': 0.10},
+    '15m': {'ema': 0.15, 'macd': 0.25, 'rsi': 0.25, 'vol': 0.20, 'regime': 0.05, 'st': 0.10},
 }
 
-# ── Issue #11: SPY relative-strength cache (15-min TTL) ───────────────────
+# ── SPY relative-strength cache (15-min TTL) ──────────────────────────────────
 _SPY_CACHE = {'ts': 0.0, 'ret20': 0.0}
 
 
@@ -67,6 +66,103 @@ def _atr(high, low, close, period=14):
         (low - close.shift(1)).abs(),
     ], axis=1).max(axis=1)
     return tr.ewm(com=period - 1, min_periods=period).mean()
+
+
+def _supertrend(high, low, close, period=10, multiplier=3.0):
+    """Returns (st_value, direction) where direction 1=bullish, -1=bearish."""
+    atr_s = _atr(high, low, close, period)
+    hl2 = (high + low) / 2.0
+
+    upper_raw = (hl2 + multiplier * atr_s).values
+    lower_raw = (hl2 - multiplier * atr_s).values
+    close_arr = close.values
+    n = len(close_arr)
+
+    fu = upper_raw.copy()
+    fl = lower_raw.copy()
+    st = np.zeros(n)
+
+    for i in range(1, n):
+        fu[i] = upper_raw[i] if upper_raw[i] < fu[i-1] or close_arr[i-1] > fu[i-1] else fu[i-1]
+        fl[i] = lower_raw[i] if lower_raw[i] > fl[i-1] or close_arr[i-1] < fl[i-1] else fl[i-1]
+        if st[i-1] == fu[i-1]:
+            st[i] = fu[i] if close_arr[i] <= fu[i] else fl[i]
+        else:
+            st[i] = fl[i] if close_arr[i] >= fl[i] else fu[i]
+
+    direction = 1 if close_arr[-1] > st[-1] else -1
+    return float(st[-1]), direction
+
+
+def _adx_di(high, low, close, period=14):
+    """Returns (adx, plus_di, minus_di)."""
+    h = high.values
+    l = low.values
+    c = close.values
+    n = len(c)
+
+    pdm = np.zeros(n)
+    ndm = np.zeros(n)
+    tr_arr = np.zeros(n)
+
+    for i in range(1, n):
+        up   = h[i] - h[i-1]
+        down = l[i-1] - l[i]
+        pdm[i]    = up   if up   > max(down, 0) else 0
+        ndm[i]    = down if down > max(up,   0) else 0
+        tr_arr[i] = max(h[i]-l[i], abs(h[i]-c[i-1]), abs(l[i]-c[i-1]))
+
+    tr_s  = pd.Series(tr_arr).ewm(com=period-1, min_periods=period).mean()
+    pdm_s = pd.Series(pdm).ewm(com=period-1, min_periods=period).mean()
+    ndm_s = pd.Series(ndm).ewm(com=period-1, min_periods=period).mean()
+
+    pdi = 100 * pdm_s / tr_s.replace(0, np.nan)
+    ndi = 100 * ndm_s / tr_s.replace(0, np.nan)
+    dx  = 100 * (pdi - ndi).abs() / (pdi + ndi).replace(0, np.nan)
+    adx = dx.ewm(com=period-1, min_periods=period).mean()
+
+    return (float(adx.iloc[-1] or 0),
+            float(pdi.iloc[-1] or 0),
+            float(ndi.iloc[-1] or 0))
+
+
+def _count_votes(c, e20, e50, e200, ml, sl, r, vr, st_dir, adx_val, pdi, ndi):
+    """Vote-based consensus: each indicator casts one vote. Returns (up, down)."""
+    up = down = 0
+
+    # 1. EMA trend (weighted: counts as 2 on full stack)
+    if e200:
+        if   c > e20 > e50 > e200: up   += 2
+        elif c < e20 < e50 < e200: down += 2
+        elif c > e20 > e50:        up   += 1
+        elif c < e20 < e50:        down += 1
+    else:
+        if   c > e20 > e50: up   += 1
+        elif c < e20 < e50: down += 1
+
+    # 2. MACD
+    if ml > sl: up   += 1
+    else:       down += 1
+
+    # 3. RSI
+    if   r >= 55: up   += 1
+    elif r <= 45: down += 1
+
+    # 4. SuperTrend
+    if   st_dir ==  1: up   += 1
+    elif st_dir == -1: down += 1
+
+    # 5. ADX directional
+    if adx_val > 20:
+        if   pdi > ndi: up   += 1
+        elif ndi > pdi: down += 1
+
+    # 6. Volume confirmation (follows direction, no independent vote)
+    if vr >= 1.5:
+        if up > down:   up   += 1
+        elif down > up: down += 1
+
+    return up, down
 
 
 _INTERVAL_PARAMS = {
@@ -120,7 +216,7 @@ def _fmt_candle_date(ts, timeframe):
         return str(ts)
 
 
-# ── Issue #2: Smooth + slope-aware RSI scoring ────────────────────────────
+# ── Smooth + slope-aware RSI scoring ─────────────────────────────────────────
 def rsi_score(r_now, r_prev):
     try:
         r_now = float(r_now)
@@ -137,7 +233,7 @@ def rsi_score(r_now, r_prev):
     return max(0.0, min(100.0, base + bonus))
 
 
-# ── Issue #4: Multi-timeframe confluence ──────────────────────────────────
+# ── Multi-timeframe confluence ────────────────────────────────────────────────
 _NEXT_TF = {'15m': '1h', '1h': '4h', '4h': '1d', '1d': '1wk'}
 
 
@@ -168,7 +264,7 @@ def htf_alignment(symbol, timeframe):
     return 0
 
 
-# ── Issue #3: Divergence detection (no external deps) ────────────────────
+# ── Divergence detection ──────────────────────────────────────────────────────
 def _local_peaks(arr, min_dist=4):
     result = []
     for i in range(1, len(arr) - 1):
@@ -199,13 +295,11 @@ def detect_divergence(close, rsi_s, lookback=40):
     p_lows  = _local_troughs(c, min_dist=4)
     r_lows  = _local_troughs(r, min_dist=4)
 
-    # Bearish divergence: price higher high, RSI lower high
     if len(p_highs) >= 2 and len(r_highs) >= 2:
         if (c[p_highs[-1]] > c[p_highs[-2]] and
                 r[r_highs[-1]] < r[r_highs[-2]] - 2):
             return 'bearish'
 
-    # Bullish divergence: price lower low, RSI higher low
     if len(p_lows) >= 2 and len(r_lows) >= 2:
         if (c[p_lows[-1]] < c[p_lows[-2]] and
                 r[r_lows[-1]] > r[r_lows[-2]] + 2):
@@ -214,9 +308,8 @@ def detect_divergence(close, rsi_s, lookback=40):
     return None
 
 
-# ── Issue #10: Candlestick patterns ──────────────────────────────────────
+# ── Candlestick patterns ──────────────────────────────────────────────────────
 def candle_patterns(opens, highs, lows, closes):
-    """Detect pin bars, engulfing candles, and N-day breakouts."""
     patterns = []
     if len(closes) < 3:
         return patterns
@@ -233,23 +326,14 @@ def candle_patterns(opens, highs, lows, closes):
     lower_wick = min(o, c) - l
     upper_wick = h - max(o, c)
 
-    # Hammer (bullish pin bar)
     if lower_wick >= 2 * body and upper_wick < 0.5 * body and c >= o:
         patterns.append('Hammer')
-
-    # Shooting Star (bearish pin bar)
     if upper_wick >= 2 * body and lower_wick < 0.5 * body and c <= o:
         patterns.append('Shooting Star')
-
-    # Bullish Engulfing
     if c2 < o2 and c > o and c >= o2 and o <= c2:
         patterns.append('Bull Engulfing')
-
-    # Bearish Engulfing
     if c2 > o2 and c < o and c <= o2 and o >= c2:
         patterns.append('Bear Engulfing')
-
-    # 20-day breakout
     if len(closes) >= 21:
         recent_high = float(highs.iloc[-21:-1].max())
         if c > recent_high:
@@ -258,7 +342,7 @@ def candle_patterns(opens, highs, lows, closes):
     return patterns
 
 
-# ── Main analyzer ─────────────────────────────────────────────────────────
+# ── Main analyzer ─────────────────────────────────────────────────────────────
 def analyze(symbol, timeframe='1d'):
     try:
         df = _fetch_with_retry(symbol, timeframe)
@@ -278,7 +362,6 @@ def analyze(symbol, timeframe='1d'):
         ema20               = _ema(close, 20)
         ema50               = _ema(close, 50)
         ema200              = _ema(close, 200) if len(df) >= 200 else None
-        # Issue #5: median volume — robust to single spike days
         vol_ma              = vol.rolling(20).median()
         atr_s               = _atr(high, low, close)
 
@@ -296,7 +379,13 @@ def analyze(symbol, timeframe='1d'):
         vma    = float(vol_ma.iloc[-1])
         atr    = float(atr_s.iloc[-1])
 
-        # ── EMA trend score ──────────────────────────────────────────────
+        # ── SuperTrend ───────────────────────────────────────────────────────
+        st_val, st_dir = _supertrend(high, low, close)
+
+        # ── ADX / DI ─────────────────────────────────────────────────────────
+        adx_val, pdi, ndi = _adx_di(high, low, close)
+
+        # ── EMA trend score ──────────────────────────────────────────────────
         if e200 is not None:
             if   c > e20 > e50 > e200: ema_sc = 92
             elif c > e20 > e50:        ema_sc = 72
@@ -313,16 +402,16 @@ def analyze(symbol, timeframe='1d'):
             elif c < e20:       ema_sc = 42
             else:               ema_sc = 50
 
-        # ── MACD score ───────────────────────────────────────────────────
+        # ── MACD score ───────────────────────────────────────────────────────
         if ml > sl:
             macd_sc = 82 if (h0 > 0 and h0 > h1) else 68 if h0 > 0 else 58
         else:
             macd_sc = 18 if (h0 < 0 and h0 < h1) else 32 if h0 < 0 else 42
 
-        # ── RSI score (smooth + slope-aware) ─────────────────────────────
+        # ── RSI score ────────────────────────────────────────────────────────
         rsi_sc = rsi_score(r, r_prev)
 
-        # ── Volume score (median-based) ───────────────────────────────────
+        # ── Volume score ─────────────────────────────────────────────────────
         vr = v / vma if vma > 0 else 1.0
         if   vr >= 2.0: vol_sc = 90
         elif vr >= 1.5: vol_sc = 75
@@ -330,13 +419,16 @@ def analyze(symbol, timeframe='1d'):
         elif vr >= 0.7: vol_sc = 38
         else:           vol_sc = 20
 
-        # ── Issue #3: Divergence bonus/penalty ───────────────────────────
+        # ── SuperTrend score ─────────────────────────────────────────────────
+        st_sc = 80 if st_dir == 1 else 20
+
+        # ── Divergence ───────────────────────────────────────────────────────
         div = detect_divergence(close, rsi_s)
         div_adj = 0
         if div == 'bullish':   div_adj = +8
         elif div == 'bearish': div_adj = -8
 
-        # ── Issue #11: Relative strength vs SPY ──────────────────────────
+        # ── Relative strength vs SPY ─────────────────────────────────────────
         if len(close) >= 21:
             stock_ret20 = float((close.iloc[-1] - close.iloc[-21]) / close.iloc[-21])
         else:
@@ -344,12 +436,12 @@ def analyze(symbol, timeframe='1d'):
         spy_ret20 = _spy_return_20d()
         rs_20 = round((stock_ret20 - spy_ret20) * 100, 2)
 
-        # ── Market regime ─────────────────────────────────────────────────
+        # ── Market regime ─────────────────────────────────────────────────────
         reg        = market_regime_score()
         regime_adj = (reg - 50) / 50.0
         regime_sc  = 50 + 50 * regime_adj
 
-        # ── Issue #1: Per-timeframe composite weights ─────────────────────
+        # ── Per-timeframe composite ───────────────────────────────────────────
         w = _WEIGHTS.get(timeframe, _WEIGHTS['1d'])
         composite = (
             w['ema']    * ema_sc
@@ -357,7 +449,8 @@ def analyze(symbol, timeframe='1d'):
             + w['rsi']  * rsi_sc
             + w['vol']  * vol_sc
             + w['regime'] * regime_sc
-            + div_adj          # divergence shifts composite directly
+            + w['st']   * st_sc
+            + div_adj
         )
         composite = max(0, min(100, composite))
 
@@ -372,7 +465,7 @@ def analyze(symbol, timeframe='1d'):
         if direction == 'Neutral':
             strength = min(strength, 25)
 
-        # ── Issue #4: MTF confluence multiplier ───────────────────────────
+        # ── MTF confluence ────────────────────────────────────────────────────
         mtf = htf_alignment(symbol, timeframe)
         if direction == 'Bullish':
             mult = 1.2 if mtf > 0 else 0.6 if mtf < 0 else 1.0
@@ -382,22 +475,41 @@ def analyze(symbol, timeframe='1d'):
             mult = 1.0
         strength = min(100, int(strength * mult))
 
-        # ── Issue #10: Candlestick patterns ──────────────────────────────
+        # ── Vote-based consensus ──────────────────────────────────────────────
+        up_votes, down_votes = _count_votes(
+            c, e20, e50, e200, ml, sl, r, vr, st_dir, adx_val, pdi, ndi)
+
+        # ── Signal type (Trend / Reversal / Mixed) ────────────────────────────
+        vote_diff = abs(up_votes - down_votes)
+        if div and ((div == 'bullish' and down_votes > up_votes) or
+                    (div == 'bearish' and up_votes > down_votes)):
+            signal_type = 'Reversal'
+        elif vote_diff >= 3:
+            signal_type = 'Trend'
+        else:
+            signal_type = 'Mixed'
+
+        # ── Candlestick patterns ──────────────────────────────────────────────
         patterns = candle_patterns(opens, high, low, close)
 
-        # ── Trade levels (ATR-based) ──────────────────────────────────────
-        if direction == 'Bullish':
-            target = round(c + 2.0 * atr, 2)
-            stop   = round(c - 1.0 * atr, 2)
-        else:
-            target = round(c - 2.0 * atr, 2)
-            stop   = round(c + 1.0 * atr, 2)
+        # ── AB.SK-style trade levels ──────────────────────────────────────────
+        # Entry at current price; SL at SuperTrend; TPs at 1.5/3/4.5× ATR
+        mult_dir = 1 if direction == 'Bullish' else -1
+        entry  = round(c, 2)
+        sl_lvl = round(st_val, 2)                         # SuperTrend stop
+        tp1    = round(c + mult_dir * 1.5 * atr, 2)
+        tp2    = round(c + mult_dir * 3.0 * atr, 2)
+        tp3    = round(c + mult_dir * 4.5 * atr, 2)
+        target = tp2                                       # default target = TP2
 
         return {
             'symbol':       symbol,
             'score':        strength,
             'direction':    direction,
             'composite':    round(composite, 1),
+            'signal_type':  signal_type,
+            'up_votes':     up_votes,
+            'down_votes':   down_votes,
             'price':        round(c, 2),
             'rsi':          round(r, 1),
             'macd':         round(ml, 4),
@@ -408,10 +520,18 @@ def analyze(symbol, timeframe='1d'):
             'volume':       int(v),
             'vol_ratio':    round(vr, 2),
             'atr':          round(atr, 2),
-            'entry':        round(c, 2),
+            'adx':          round(adx_val, 1),
+            'adx_plus_di':  round(pdi, 1),
+            'adx_minus_di': round(ndi, 1),
+            'supertrend':   round(st_val, 2),
+            'supertrend_dir': st_dir,
+            'entry':        entry,
+            'stop':         sl_lvl,
+            'tp1':          tp1,
+            'tp2':          tp2,
+            'tp3':          tp3,
             'target':       target,
-            'stop':         stop,
-            'rr':           2.0,
+            'rr':           round(abs(tp2 - c) / max(abs(c - sl_lvl), 0.01), 2),
             'ema_score':    round(ema_sc, 1),
             'macd_score':   round(macd_sc, 1),
             'rsi_score':    round(rsi_sc, 1),
