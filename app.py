@@ -58,6 +58,7 @@ def scan():
     sector    = data.get('sector', 'all')
     custom    = data.get('symbols', [])
     force     = data.get('force', False)
+    islamic   = bool(data.get('islamic', False))
 
     custom_syms = [s.strip().upper() for s in custom if s.strip()]
 
@@ -86,7 +87,8 @@ def scan():
     else:
         # General scan: use TradingView screener (fast, real-time, + TV ratings)
         try:
-            results = scan_tv(sector=sector, timeframe=timeframe, min_score=min_score)
+            results = scan_tv(sector=sector, timeframe=timeframe,
+                              min_score=min_score, islamic=islamic)
         except Exception as e:
             print(f"[TV scan failed: {e}] — falling back to yfinance")
             symbols = get_symbols_by_sector(sector)
@@ -113,6 +115,7 @@ def scan():
         'bullish_count': len([r for r in results if r['direction'] == 'Bullish']),
         'bearish_count': len([r for r in results if r['direction'] == 'Bearish']),
         'strong_count':  len([r for r in results if r['score'] >= 70]),
+        'halal_count':   len([r for r in results if r.get('halal')]),
         'timestamp':     ny_time(),
         'data_as_of':    data_as_of,
         'timeframe':     timeframe,

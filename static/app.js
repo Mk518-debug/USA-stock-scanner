@@ -31,6 +31,7 @@ let lastTF      = '1d';
 let searchQuery = '';
 let watchedSet  = new Set();
 let dismissSet  = new Set();
+let islamicMode = false;
 
 // ── Theme ─────────────────────────────────────────────────────────────────
 function applyTheme(light) {
@@ -94,6 +95,37 @@ document.querySelectorAll('.ftab').forEach(tab => {
   });
 });
 
+// ── Islamic / Shariah toggle ──────────────────────────────────────────────
+function setIslamic(on) {
+  islamicMode = on;
+  document.getElementById('islamicOff').classList.toggle('active',  !on);
+  document.getElementById('islamicOn').classList.toggle('active',    on);
+  document.getElementById('islamicInfo').style.display = on ? '' : 'none';
+
+  // Tint the scan button green when Islamic mode is active
+  const scanBtn = document.getElementById('scanBtn');
+  if (scanBtn) scanBtn.classList.toggle('halal-active', on);
+
+  // Update scan button text to indicate Islamic mode
+  const txt = document.getElementById('scanBtnText');
+  if (txt) txt.textContent = on ? '☪ HALAL SCAN' : '🔍 START SCAN';
+
+  // Show/hide the Halal filter tab
+  const halalTab = document.querySelector('.ftab-halal');
+  if (halalTab) halalTab.style.display = on ? '' : 'none';
+
+  // If halal tab was active and turning off, switch to all
+  if (!on && activeTab === 'halal') {
+    document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.ftab[data-tab="all"]').classList.add('active');
+    activeTab = 'all';
+    render();
+  }
+
+  // Re-render to immediately filter/unfilter cards if results already loaded
+  if (allResults.length) render();
+}
+
 // ── Market / Custom switch ────────────────────────────────────────────────
 function switchMarket(mode) {
   document.getElementById('mtAll').classList.toggle('active',    mode === 'all');
@@ -119,7 +151,7 @@ async function startScan(force = false) {
   try {
     const res  = await fetch('/api/scan', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ timeframe, min_score: minScore, sector, symbols, force }),
+      body: JSON.stringify({ timeframe, min_score: minScore, sector, symbols, force, islamic: islamicMode }),
     });
     const text = await res.text();
     let data;
@@ -166,6 +198,9 @@ function updateStats(d) {
     re.className   = 'sb-regime ' + (rs >= 60 ? 'bull' : rs <= 40 ? 'bear' : '');
   }
 
+  const halalEl = document.getElementById('sHalal');
+  if (halalEl) halalEl.textContent = d.halal_count !== undefined ? d.halal_count : '—';
+
   document.getElementById('cacheTag').style.display = d.from_cache ? 'inline-block' : 'none';
 }
 
@@ -196,6 +231,7 @@ function getFiltered() {
     case 's80':     list = list.filter(r => r.score>=80); break;
     case 'strong':  list = list.filter(r => ['Strong Buy','Buy'].includes(r.tv_rating)); break;
     case 'open':    list = list.filter(r => watchedSet.has(r.symbol)); break;
+    case 'halal':   list = list.filter(r => r.halal === true); break;
   }
   switch (scanType) {
     case 'trend':    list = list.filter(r => r.ema_score>=70); break;
@@ -331,6 +367,7 @@ function buildCard(r) {
       <div class="card-badges">
         <span class="scan-type-tag">${scanType.charAt(0).toUpperCase()+scanType.slice(1)}</span>
         <span class="sector-tag">${r.sector||''}</span>
+        ${r.halal ? '<span class="halal-badge">☪ Halal</span>' : ''}
         ${isW?'<span class="watched-chip">📌 Watching</span>':''}
       </div>
       <div class="card-sym-row">
@@ -456,6 +493,9 @@ function setLoading(on) {
   document.getElementById('loadingOverlay').style.display = on ? 'flex' : 'none';
   const btn = document.getElementById('scanBtn');
   if (btn) btn.disabled = on;
+  const txt = document.getElementById('scanBtnText');
+  if (txt && !on) txt.textContent = islamicMode ? '☪ HALAL SCAN' : '🔍 START SCAN';
+  if (txt && on)  txt.textContent = '⏳ SCANNING…';
 }
 
 // ══════════════════════════════════════════════════════════════════════════

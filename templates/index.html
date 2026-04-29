@@ -52,6 +52,10 @@
           <div class="sb-label">Prevailing Trend</div>
         </div>
         <div class="stats-box">
+          <div class="sb-num" id="sHalal" style="color:#4caf50">—</div>
+          <div class="sb-label">☪ Halal Stocks</div>
+        </div>
+        <div class="stats-box">
           <div class="sb-regime" id="sRegime">—</div>
           <div class="sb-label">Market Regime</div>
         </div>
@@ -71,6 +75,7 @@
           <button class="ftab" data-tab="s80">🔥 80+</button>
           <button class="ftab" data-tab="strong">⚡ Strong Buy</button>
           <button class="ftab" data-tab="open">📌 Watching</button>
+        <button class="ftab ftab-halal" data-tab="halal" style="display:none">☪ Halal</button>
         <button class="ftab ftab-news" data-tab="news">📰 News</button>
         </div>
         <div class="filter-right">
@@ -167,6 +172,23 @@
           <div class="sb-sec-label">Min Score &nbsp;<span id="scoreDisplay" class="score-display">50</span></div>
           <input id="minScore" class="score-slider" type="range" min="0" max="100" value="50"
             oninput="document.getElementById('scoreDisplay').textContent=this.value">
+        </div>
+
+        <!-- Islamic / Shariah Filter -->
+        <div class="sb-sec">
+          <div class="sb-sec-label">🌙 Islamic Filter</div>
+          <div class="market-tabs">
+            <button class="mtab active" id="islamicOff" onclick="setIslamic(false)">All Stocks</button>
+            <button class="mtab" id="islamicOn"  onclick="setIslamic(true)">Halal Only ☪</button>
+          </div>
+          <div id="islamicInfo" class="islamic-info" style="display:none">
+            <div class="ii-row">✓ Excludes financial sector (riba)</div>
+            <div class="ii-row">✓ Debt/equity &lt; 100% (AAOIFI)</div>
+            <div class="ii-row">✓ No alcohol / gambling / tobacco</div>
+            <a href="https://awaed.com" target="_blank" rel="noopener" class="ii-link">
+              Powered by Awaed Capital ↗
+            </a>
+          </div>
         </div>
 
         <div class="sb-sec">

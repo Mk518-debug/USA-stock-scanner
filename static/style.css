@@ -483,6 +483,57 @@ body.light .dp.bad    { background: rgba(211,47,47,.06); border-color: rgba(211,
 .ftab-news  { border-color: rgba(68,138,255,.3) !important; color: var(--blue) !important; }
 .ftab-news.active { background: rgba(68,138,255,.15) !important; border-color: var(--blue) !important; }
 
+/* ── Islamic / Halal styles ── */
+.ftab-halal        { border-color: rgba(76,175,80,.35) !important; color: #4caf50 !important; }
+.ftab-halal.active { background: rgba(76,175,80,.15) !important; border-color: #4caf50 !important; }
+
+.halal-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(76,175,80,.15);
+  color: #4caf50;
+  border: 1px solid rgba(76,175,80,.35);
+  letter-spacing: 0.3px;
+}
+
+/* Islamic filter info box in sidebar */
+.islamic-info {
+  margin-top: 8px;
+  background: rgba(76,175,80,.06);
+  border: 1px solid rgba(76,175,80,.2);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+.ii-row {
+  font-size: 0.72rem;
+  color: #4caf50;
+  padding: 2px 0;
+}
+.ii-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #4caf50;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(76,175,80,.4);
+  padding-bottom: 1px;
+  transition: color .15s;
+}
+.ii-link:hover { color: var(--green); }
+
+/* Halal mode active indicator on scan button */
+.scan-btn-main.halal-active {
+  background: linear-gradient(135deg, #2e7d32, #1b5e20);
+  box-shadow: 0 4px 15px rgba(76,175,80,.35);
+}
+
+/* Light mode overrides */
+body.light .halal-badge { background: rgba(46,125,50,.1); }
+body.light .islamic-info { background: rgba(46,125,50,.06); border-color: rgba(46,125,50,.2); }
+
 /* News bar (filter chips + stock selector) */
 .news-bar   { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .news-chips { display: flex; gap: 6px; flex-wrap: wrap; }
