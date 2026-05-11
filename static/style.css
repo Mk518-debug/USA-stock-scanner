@@ -125,6 +125,18 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 
 .cache-tag     { font-size: 0.65rem; font-weight: 700; color: var(--yellow); background: rgba(255,215,64,.1); border: 1px solid rgba(255,215,64,.25); padding: 2px 8px; border-radius: 10px; margin-top: 4px; display: inline-block; width: fit-content; }
 
+/* Scan Quality stat box */
+.sb-quality       { font-size: 1.3rem; font-weight: 900; line-height: 1; }
+.sb-quality.grade-a { color: var(--green); }
+.sb-quality.grade-b { color: #69f0ae; }
+.sb-quality.grade-c { color: var(--yellow); }
+.sb-quality.grade-d { color: var(--red); }
+.grade-badge        { font-size: 0.72rem; font-weight: 800; padding: 1px 7px; border-radius: 8px; display: inline-block; margin-top: 2px; }
+.grade-badge.a { background: rgba(0,230,118,.15);  color: var(--green);  border: 1px solid rgba(0,230,118,.3); }
+.grade-badge.b { background: rgba(105,240,174,.12); color: #69f0ae;       border: 1px solid rgba(105,240,174,.25); }
+.grade-badge.c { background: rgba(255,215,64,.1);  color: var(--yellow); border: 1px solid rgba(255,215,64,.25); }
+.grade-badge.d { background: rgba(255,23,68,.1);   color: var(--red);    border: 1px solid rgba(255,23,68,.25); }
+
 /* ════════════════════════════════════════════════════════
    Filter Bar
 ════════════════════════════════════════════════════════ */
@@ -572,6 +584,54 @@ body.light .dp.bad    { background: rgba(211,47,47,.06); border-color: rgba(211,
 
 /* Light mode */
 body.light .news-item { box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+
+/* ════════════════════════════════════════════════════════
+   Accuracy Report Panel
+════════════════════════════════════════════════════════ */
+.acc-panel      { background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r); overflow: hidden; margin-bottom: 14px; }
+
+/* Top row: grade + bar + insight */
+.acc-top        { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; }
+.acc-grade-col  { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.acc-grade      { width: 52px; height: 52px; border-radius: var(--r); border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 900; }
+.acc-grade-lbl  { font-size: 0.62rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; }
+.acc-main       { flex: 1; min-width: 0; }
+.acc-title      { font-size: 0.88rem; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+.acc-source     { font-size: 0.7rem; font-weight: 400; color: var(--text3); }
+.acc-bar-wrap   { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.acc-bar-track  { flex: 1; height: 8px; background: var(--border2); border-radius: 4px; overflow: hidden; }
+.acc-bar-fill   { height: 100%; border-radius: 4px; transition: width .6s ease; }
+.acc-score-val  { font-size: 0.82rem; font-weight: 800; color: var(--text); flex-shrink: 0; min-width: 48px; text-align: right; }
+.acc-insight    { font-size: 0.78rem; color: var(--text2); line-height: 1.45; }
+.acc-close      { background: transparent; border: none; color: var(--text3); cursor: pointer; font-size: 1rem; padding: 2px 6px; flex-shrink: 0; transition: color .15s; }
+.acc-close:hover { color: var(--red); }
+
+/* Metrics grid */
+.acc-metrics    { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); border-top: 1px solid var(--border); }
+.acc-m          { padding: 10px 14px; border-right: 1px solid var(--border); text-align: center; }
+.acc-m:last-child { border-right: none; }
+.acc-m-val      { font-size: 1.2rem; font-weight: 900; line-height: 1; margin-bottom: 3px; }
+.acc-m-val.good { color: var(--green); }
+.acc-m-val.ok   { color: var(--yellow); }
+.acc-m-val.bad  { color: var(--red); }
+.acc-m-lbl      { font-size: 0.65rem; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+.acc-m-sub      { font-size: 0.6rem; color: var(--text3); margin-top: 2px; }
+
+/* Distribution bars */
+.acc-dist       { border-top: 1px solid var(--border); padding: 10px 16px; }
+.acc-dist-lbl   { font-size: 0.65rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; margin-bottom: 8px; }
+.acc-dist-bars  { display: flex; flex-direction: column; gap: 6px; }
+.acc-dist-row   { display: flex; align-items: center; gap: 8px; }
+.acc-dist-name  { font-size: 0.72rem; font-weight: 600; color: var(--text2); min-width: 60px; }
+.acc-dist-track { flex: 1; height: 6px; background: var(--border2); border-radius: 3px; overflow: hidden; }
+.acc-dist-fill  { height: 100%; border-radius: 3px; transition: width .5s ease; min-width: 2px; }
+.trend-fill     { background: var(--green); }
+.rev-fill       { background: var(--orange); }
+.mix-fill       { background: var(--text3); }
+.acc-dist-count { font-size: 0.72rem; font-weight: 700; color: var(--text2); min-width: 24px; text-align: right; }
+
+/* Light mode overrides */
+body.light .acc-panel { box-shadow: 0 1px 6px rgba(0,0,0,.07); }
 
 /* ════════════════════════════════════════════════════════
    Responsive

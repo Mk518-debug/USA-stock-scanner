@@ -9,10 +9,10 @@ from core_regime import market_regime_score
 
 # ── Per-timeframe composite weights ──────────────────────────────────────────
 _WEIGHTS = {
-    '1d':  {'ema': 0.30, 'macd': 0.20, 'rsi': 0.15, 'vol': 0.10, 'regime': 0.10, 'st': 0.15},
-    '4h':  {'ema': 0.25, 'macd': 0.25, 'rsi': 0.20, 'vol': 0.10, 'regime': 0.05, 'st': 0.15},
-    '1h':  {'ema': 0.20, 'macd': 0.25, 'rsi': 0.20, 'vol': 0.15, 'regime': 0.05, 'st': 0.15},
-    '15m': {'ema': 0.15, 'macd': 0.25, 'rsi': 0.20, 'vol': 0.20, 'regime': 0.05, 'st': 0.15},
+    '1d':  {'ema': 0.28, 'macd': 0.18, 'rsi': 0.12, 'vol': 0.08, 'regime': 0.10, 'st': 0.12, 'stoch': 0.06, 'mom': 0.06},
+    '4h':  {'ema': 0.22, 'macd': 0.20, 'rsi': 0.15, 'vol': 0.10, 'regime': 0.08, 'st': 0.12, 'stoch': 0.07, 'mom': 0.06},
+    '1h':  {'ema': 0.18, 'macd': 0.20, 'rsi': 0.18, 'vol': 0.12, 'regime': 0.05, 'st': 0.12, 'stoch': 0.08, 'mom': 0.07},
+    '15m': {'ema': 0.13, 'macd': 0.20, 'rsi': 0.18, 'vol': 0.15, 'regime': 0.04, 'st': 0.12, 'stoch': 0.10, 'mom': 0.08},
 }
 
 # ── SPY relative-strength cache ───────────────────────────────────────────────
@@ -38,12 +38,12 @@ def _spy_return_20d():
 # ── Indicator functions ───────────────────────────────────────────────────────
 
 def _rsi(prices, period=14):
-    delta = prices.diff()
-    gain  = delta.clip(lower=0)
-    loss  = -delta.clip(upper=0)
+    delta    = prices.diff()
+    gain     = delta.clip(lower=0)
+    loss     = -delta.clip(upper=0)
     avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
     avg_loss = loss.ewm(com=period - 1, min_periods=period).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
+    rs       = avg_gain / avg_loss.replace(0, np.nan)
     return 100 - (100 / (1 + rs))
 
 
@@ -68,22 +68,38 @@ def _atr(high, low, close, period=14):
     return tr.ewm(com=period - 1, min_periods=period).mean()
 
 
+def _stochastic(high, low, close, k_period=14, d_period=3):
+    """Returns (%K, %D). Values 0-100."""
+    low_min  = low.rolling(k_period).min()
+    high_max = high.rolling(k_period).max()
+    k = 100 * (close - low_min) / (high_max - low_min).replace(0, np.nan)
+    d = k.rolling(d_period).mean()
+    k_val = float(k.iloc[-1] if not pd.isna(k.iloc[-1]) else 50)
+    d_val = float(d.iloc[-1] if not pd.isna(d.iloc[-1]) else 50)
+    return k_val, d_val
+
+
+def _momentum_score(close, period=20):
+    """Price momentum: 20-day return mapped to 0-100 score."""
+    if len(close) < period + 1:
+        return 50.0
+    ret = float((close.iloc[-1] - close.iloc[-period]) / close.iloc[-period])
+    # Sigmoid-like mapping: +20% return → ~90 score, -20% → ~10 score
+    score = 50 + 50 * math.tanh(ret * 4)
+    return max(0.0, min(100.0, score))
+
+
 def _bollinger(close, period=20, std_dev=2.0):
-    """Returns (upper, middle, lower, squeeze_pct).
-    squeeze_pct: 0=open bands, 100=max squeeze seen in last 100 bars."""
+    """Returns (upper, middle, lower, squeeze_pct)."""
     mid   = close.rolling(period).mean()
     std   = close.rolling(period).std()
     upper = mid + std_dev * std
     lower = mid - std_dev * std
     width = (upper - lower) / mid.replace(0, np.nan) * 100
 
-    # Squeeze percentile: how narrow are bands vs recent history?
     cur_w = float(width.iloc[-1] or 0)
     hist  = width.dropna().iloc[-100:]
-    if len(hist) > 10:
-        squeeze_pct = int((1.0 - float((hist < cur_w).mean())) * 100)
-    else:
-        squeeze_pct = 0
+    squeeze_pct = int((1.0 - float((hist < cur_w).mean())) * 100) if len(hist) > 10 else 0
 
     return (float(upper.iloc[-1] or 0),
             float(mid.iloc[-1]   or 0),
@@ -117,12 +133,8 @@ def _supertrend(high, low, close, period=10, multiplier=3.0):
 
 
 def _adx_di(high, low, close, period=14):
-    """Returns (adx, plus_di, minus_di, adx_rising).
-    adx_rising = True when ADX has been increasing for last 3 bars."""
-    h = high.values
-    l = low.values
-    c = close.values
-    n = len(c)
+    """Returns (adx, plus_di, minus_di, adx_rising)."""
+    h = high.values;  l = low.values;  c = close.values;  n = len(c)
 
     pdm    = np.zeros(n)
     ndm    = np.zeros(n)
@@ -144,10 +156,10 @@ def _adx_di(high, low, close, period=14):
     dx  = 100 * (pdi - ndi).abs() / (pdi + ndi).replace(0, np.nan)
     adx = dx.ewm(com=period-1, min_periods=period).mean()
 
-    adx_vals    = adx.dropna().values
-    adx_rising  = (len(adx_vals) >= 3 and
-                   adx_vals[-1] > adx_vals[-2] > adx_vals[-3] and
-                   adx_vals[-1] > 20)
+    adx_vals   = adx.dropna().values
+    adx_rising = (len(adx_vals) >= 3 and
+                  adx_vals[-1] > adx_vals[-2] > adx_vals[-3] and
+                  adx_vals[-1] > 20)
 
     return (float(adx.iloc[-1] or 0),
             float(pdi.iloc[-1] or 0),
@@ -156,10 +168,11 @@ def _adx_di(high, low, close, period=14):
 
 
 def _count_votes(c, e20, e50, e200, ml, sl, r, vr, st_dir,
-                 adx_val, pdi, ndi, bb_mid, htf_ema, divergence):
+                 adx_val, pdi, ndi, bb_mid, htf_ema, divergence,
+                 stoch_k, stoch_d, mom_score):
     """
-    10-indicator vote system (some abstain when neutral).
-    Returns (up_votes, down_votes).
+    11-indicator vote system. Returns (up_votes, down_votes).
+    Max possible = 13 (divergence counts x2, some indicators abstain).
     """
     up = down = 0
 
@@ -167,13 +180,13 @@ def _count_votes(c, e20, e50, e200, ml, sl, r, vr, st_dir,
     if e200:
         if   c > e20 > e50 > e200: up   += 1
         elif c < e20 < e50 < e200: down += 1
-        elif c > e20 > e50:        up   += 1  # no e200 stack but still aligned
+        elif c > e20 > e50:        up   += 1
         elif c < e20 < e50:        down += 1
     else:
         if   c > e20 > e50: up   += 1
         elif c < e20 < e50: down += 1
 
-    # 2. HTF EMA (higher timeframe confirms)
+    # 2. HTF EMA confirms
     if   htf_ema ==  1: up   += 1
     elif htf_ema == -1: down += 1
 
@@ -181,30 +194,41 @@ def _count_votes(c, e20, e50, e200, ml, sl, r, vr, st_dir,
     if ml > sl: up   += 1
     else:       down += 1
 
-    # 4. RSI level (abstains in neutral zone 45-55)
+    # 4. RSI level (abstains 45-55 neutral zone)
     if   r >= 55: up   += 1
     elif r <= 45: down += 1
 
-    # 5. SuperTrend direction
+    # 5. SuperTrend
     if   st_dir ==  1: up   += 1
     elif st_dir == -1: down += 1
 
-    # 6. ADX + Directional Index (abstains if trend weak)
-    if adx_val > 20:
+    # 6. ADX + Directional (abstains if trend weak)
+    if adx_val > 25:
         if   pdi > ndi: up   += 1
         elif ndi > pdi: down += 1
 
-    # 7. Volume confirmation (follows the stronger side)
+    # 7. Volume confirmation (follows stronger side)
     if vr >= 1.5:
-        if up > down:   up   += 1
+        if   up > down: up   += 1
         elif down > up: down += 1
 
-    # 8. Bollinger Band position (price vs midline)
+    # 8. Bollinger position
     if bb_mid:
         if   c > bb_mid: up   += 1
         elif c < bb_mid: down += 1
 
-    # 9-10. Divergence counts as 2 votes (strong reversal signal)
+    # 9. Stochastic (%K vs %D, avoiding extreme overbought/sold)
+    if stoch_k is not None and stoch_d is not None:
+        if   stoch_k > stoch_d and stoch_k < 80:  up   += 1  # rising, not overbought
+        elif stoch_k < stoch_d and stoch_k > 20:  down += 1  # falling, not oversold
+        elif stoch_k < 20 and stoch_k > stoch_d:  up   += 1  # oversold recovery
+        elif stoch_k > 80 and stoch_k < stoch_d:  down += 1  # overbought reversal
+
+    # 10. Momentum (20-day price direction, abstains if flat)
+    if mom_score >= 58: up   += 1
+    elif mom_score <= 42: down += 1
+
+    # 11-12. Divergence counts x2 (strong reversal signal)
     if   divergence == 'bullish': up   += 2
     elif divergence == 'bearish': down += 2
 
@@ -221,14 +245,8 @@ _INTERVAL_PARAMS = {
 
 def _fetch(symbol, timeframe):
     p = _INTERVAL_PARAMS.get(timeframe, _INTERVAL_PARAMS['1d'])
-    df = yf.download(
-        symbol,
-        period=p['period'],
-        interval=p['interval'],
-        progress=False,
-        auto_adjust=True,
-        actions=False,
-    )
+    df = yf.download(symbol, period=p['period'], interval=p['interval'],
+                     progress=False, auto_adjust=True, actions=False)
     if df.empty:
         return None
     if isinstance(df.columns, pd.MultiIndex):
@@ -416,16 +434,14 @@ def analyze(symbol, timeframe='1d'):
         vma    = float(vol_ma.iloc[-1])
         atr    = float(atr_s.iloc[-1])
 
-        # ── Bollinger Bands ──────────────────────────────────────────────────
+        # ── New indicators ───────────────────────────────────────────────────
         bb_upper, bb_mid, bb_lower, bb_squeeze = _bollinger(close)
-
-        # ── SuperTrend ───────────────────────────────────────────────────────
-        st_val, st_dir = _supertrend(high, low, close)
-
-        # ── ADX / DI (includes ADX Rising detection) ──────────────────────
+        st_val,   st_dir   = _supertrend(high, low, close)
         adx_val, pdi, ndi, adx_rising = _adx_di(high, low, close)
+        stoch_k, stoch_d   = _stochastic(high, low, close)
+        mom_sc             = _momentum_score(close)
 
-        # ── EMA trend score ──────────────────────────────────────────────────
+        # ── Scores ───────────────────────────────────────────────────────────
         if e200 is not None:
             if   c > e20 > e50 > e200: ema_sc = 92
             elif c > e20 > e50:        ema_sc = 72
@@ -441,16 +457,13 @@ def analyze(symbol, timeframe='1d'):
             elif c < e20:       ema_sc = 42
             else:               ema_sc = 50
 
-        # ── MACD score ───────────────────────────────────────────────────────
         if ml > sl:
             macd_sc = 82 if (h0 > 0 and h0 > h1) else 68 if h0 > 0 else 58
         else:
             macd_sc = 18 if (h0 < 0 and h0 < h1) else 32 if h0 < 0 else 42
 
-        # ── RSI score ────────────────────────────────────────────────────────
         rsi_sc = rsi_score(r, r_prev)
 
-        # ── Volume score ─────────────────────────────────────────────────────
         vr = v / vma if vma > 0 else 1.0
         if   vr >= 2.0: vol_sc = 90
         elif vr >= 1.5: vol_sc = 75
@@ -458,8 +471,14 @@ def analyze(symbol, timeframe='1d'):
         elif vr >= 0.7: vol_sc = 38
         else:           vol_sc = 20
 
-        # ── SuperTrend score ─────────────────────────────────────────────────
         st_sc = 80 if st_dir == 1 else 20
+
+        # Stochastic score
+        if stoch_k > stoch_d and stoch_k < 80:  stoch_sc = 72
+        elif stoch_k < stoch_d and stoch_k > 20: stoch_sc = 28
+        elif stoch_k < 20:                       stoch_sc = 65  # oversold bounce potential
+        elif stoch_k > 80:                       stoch_sc = 35  # overbought caution
+        else:                                    stoch_sc = 50
 
         # ── Divergence ───────────────────────────────────────────────────────
         div = detect_divergence(close, rsi_s)
@@ -480,7 +499,7 @@ def analyze(symbol, timeframe='1d'):
         regime_adj = (reg - 50) / 50.0
         regime_sc  = 50 + 50 * regime_adj
 
-        # ── Per-timeframe composite ───────────────────────────────────────────
+        # ── Composite score (per-timeframe weights) ───────────────────────────
         w = _WEIGHTS.get(timeframe, _WEIGHTS['1d'])
         composite = (
             w['ema']    * ema_sc
@@ -489,6 +508,8 @@ def analyze(symbol, timeframe='1d'):
             + w['vol']  * vol_sc
             + w['regime'] * regime_sc
             + w['st']   * st_sc
+            + w['stoch'] * stoch_sc
+            + w['mom']  * mom_sc
             + div_adj
         )
         composite = max(0, min(100, composite))
@@ -511,34 +532,46 @@ def analyze(symbol, timeframe='1d'):
             mult_score = 1.0
         strength = min(100, int(strength * mult_score))
 
-        # ── Vote-based consensus ──────────────────────────────────────────────
+        # ── Vote consensus (11 indicators) ───────────────────────────────────
         up_votes, down_votes = _count_votes(
             c, e20, e50, e200, ml, sl, r, vr,
             st_dir, adx_val, pdi, ndi,
-            bb_mid, mtf, div)
+            bb_mid, mtf, div,
+            stoch_k, stoch_d, mom_sc)
 
         vote_diff = abs(up_votes - down_votes)
+        total_votes = up_votes + down_votes
+        # Signal type with quality-aware thresholds
         if div and ((div == 'bullish' and down_votes > up_votes) or
                     (div == 'bearish' and up_votes > down_votes)):
             signal_type = 'Reversal'
-        elif vote_diff >= 3:
+        elif vote_diff >= 4:
             signal_type = 'Trend'
-        else:
+        elif vote_diff >= 2:
             signal_type = 'Mixed'
+        else:
+            signal_type = 'Weak'
+
+        # ── Indicator accuracy bonus: consensus alignment boost ───────────────
+        # When all major indicators agree, boost confidence
+        consensus_ratio = max(up_votes, down_votes) / max(total_votes, 1)
+        if consensus_ratio >= 0.75 and total_votes >= 7:
+            strength = min(100, int(strength * 1.1))
 
         # ── Candlestick + technical patterns ─────────────────────────────────
         patterns = candle_patterns(opens, high, low, close)
 
-        if div == 'bullish':  patterns.append('Bullish Divergence')
-        if div == 'bearish':  patterns.append('Bearish Divergence')
-        if bb_squeeze >= 70:  patterns.append(f'BB Squeeze {bb_squeeze}%')
-        if adx_rising:        patterns.append('ADX Rising')
-        if mtf > 0:           patterns.append('HTF Aligned')
-        if rs_20 >= 5:        patterns.append('RS+ vs SPY')
-        if rs_20 <= -5:       patterns.append('RS- vs SPY')
+        if div == 'bullish':    patterns.append('Bullish Divergence')
+        if div == 'bearish':    patterns.append('Bearish Divergence')
+        if bb_squeeze >= 70:    patterns.append(f'BB Squeeze {bb_squeeze}%')
+        if adx_rising:          patterns.append('ADX Rising')
+        if stoch_k < 25:        patterns.append('Stoch Oversold')
+        if stoch_k > 75:        patterns.append('Stoch Overbought')
+        if mtf > 0:             patterns.append('HTF Aligned')
+        if rs_20 >= 5:          patterns.append('RS+ vs SPY')
+        if rs_20 <= -5:         patterns.append('RS- vs SPY')
 
         # ── AB.SK trade levels ────────────────────────────────────────────────
-        # Stop = 5×ATR, Goal1 = 2.5×ATR, Goal2 = 5×ATR, Goal3 = 7.5×ATR
         mult_dir = 1 if direction == 'Bullish' else -1
         entry    = round(c, 4)
         stop_lvl = round(c - mult_dir * 5.0 * atr, 4)
@@ -569,6 +602,9 @@ def analyze(symbol, timeframe='1d'):
             'adx_plus_di':   round(pdi, 1),
             'adx_minus_di':  round(ndi, 1),
             'adx_rising':    adx_rising,
+            'stoch_k':       round(stoch_k, 1),
+            'stoch_d':       round(stoch_d, 1),
+            'momentum':      round(mom_sc, 1),
             'supertrend':    round(st_val, 4),
             'supertrend_dir': st_dir,
             'bb_upper':      round(bb_upper, 4),
@@ -586,6 +622,8 @@ def analyze(symbol, timeframe='1d'):
             'macd_score':    round(macd_sc, 1),
             'rsi_score':     round(rsi_sc, 1),
             'vol_score':     round(vol_sc, 1),
+            'stoch_score':   round(stoch_sc, 1),
+            'mom_score':     round(mom_sc, 1),
             'regime_score':  int(reg),
             'htf_ema_dir':   int(mtf),
             'mtf_align':     int(mtf),

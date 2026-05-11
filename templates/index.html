@@ -56,6 +56,11 @@
           <div class="sb-label">Market Regime</div>
         </div>
         <div class="stats-box">
+          <div class="sb-quality" id="sQuality">—</div>
+          <div class="sb-label">Scan Quality</div>
+          <div class="sb-sub" id="sGrade"></div>
+        </div>
+        <div class="stats-box">
           <div class="sb-time" id="sTime">—</div>
           <div class="sb-label">Last Scan</div>
           <span id="cacheTag" class="cache-tag" style="display:none">⚡ Cached</span>
@@ -88,6 +93,9 @@
       </div>
 
       </div><!-- end .sticky-bars -->
+
+      <!-- Accuracy Report (injected by JS after scan) -->
+      <div id="accuracyReport" style="display:none; padding:12px 16px 0;"></div>
 
       <!-- Scanner Cards Area -->
       <div class="cards-area" id="cardsArea">

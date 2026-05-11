@@ -136,6 +136,7 @@ async function startScan(force = false) {
     document.querySelector('.ftab[data-tab="all"]').classList.add('active');
     activeTab = 'all';
     render();
+    showAccuracyReport(data);
     // Recalculate after sticky-bars grows (stats + filter now visible)
     requestAnimationFrame(fitScrollZones);
   } catch (err) {
@@ -166,7 +167,125 @@ function updateStats(d) {
     re.className   = 'sb-regime ' + (rs >= 60 ? 'bull' : rs <= 40 ? 'bear' : '');
   }
 
+  // Scan Quality badge
+  const qe = document.getElementById('sQuality');
+  const ge = document.getElementById('sGrade');
+  if (qe && d.quality_score !== undefined) {
+    const qs = d.quality_score;
+    qe.textContent = qs + '/100';
+    qe.className   = 'sb-quality ' + (qs >= 80 ? 'grade-a' : qs >= 65 ? 'grade-b' : qs >= 50 ? 'grade-c' : 'grade-d');
+    if (ge) { ge.textContent = 'Grade ' + (d.scan_grade || '—'); ge.className = 'sb-sub grade-badge ' + (d.scan_grade||'').toLowerCase(); }
+  }
+
   document.getElementById('cacheTag').style.display = d.from_cache ? 'inline-block' : 'none';
+}
+
+// ── Accuracy Report Panel ─────────────────────────────────────────────────
+function showAccuracyReport(d) {
+  const el = document.getElementById('accuracyReport');
+  if (!el || d.quality_score === undefined) return;
+
+  const qs    = d.quality_score || 0;
+  const grade = d.scan_grade   || '—';
+  const gradeColor = grade === 'A' ? 'var(--green)' : grade === 'B' ? '#69f0ae'
+                   : grade === 'C' ? 'var(--yellow)' : 'var(--red)';
+  const barW = qs + '%';
+
+  const clarity  = d.clarity_pct      || 0;
+  const trendPct = d.trend_pct        || 0;
+  const avgVotes = d.avg_up_votes     || 0;
+  const highConf = d.high_conf_count  || 0;
+  const avgScore = d.avg_score        || 0;
+  const insight  = d.scan_insight     || '';
+  const regMatch = d.regime_match;
+
+  // Indicator breakdown for scanned results
+  const total = allResults.length || 1;
+  const trendCount    = allResults.filter(r => r.signal_type === 'Trend').length;
+  const reversalCount = allResults.filter(r => r.signal_type === 'Reversal').length;
+  const mixedCount    = allResults.filter(r => r.signal_type === 'Mixed' || r.signal_type === 'Weak').length;
+
+  el.style.display = 'block';
+  el.innerHTML = `
+<div class="acc-panel">
+  <div class="acc-top">
+    <div class="acc-grade-col">
+      <div class="acc-grade" style="color:${gradeColor};border-color:${gradeColor}">${grade}</div>
+      <div class="acc-grade-lbl">Scan Grade</div>
+    </div>
+    <div class="acc-main">
+      <div class="acc-title">Scan Quality Report <span class="acc-source">${d.source||'TradingView'} · ${d.timeframe||'1D'}</span></div>
+      <div class="acc-bar-wrap">
+        <div class="acc-bar-track">
+          <div class="acc-bar-fill" style="width:${barW};background:${gradeColor}"></div>
+        </div>
+        <span class="acc-score-val">${qs}/100</span>
+      </div>
+      <div class="acc-insight">${insight}</div>
+    </div>
+    <button class="acc-close" onclick="document.getElementById('accuracyReport').style.display='none'">✕</button>
+  </div>
+
+  <div class="acc-metrics">
+    <div class="acc-m">
+      <div class="acc-m-val ${clarity>=70?'good':clarity>=50?'ok':'bad'}">${clarity}%</div>
+      <div class="acc-m-lbl">Clear Signals</div>
+      <div class="acc-m-sub">Vote diff ≥ 3</div>
+    </div>
+    <div class="acc-m">
+      <div class="acc-m-val ${trendPct>=60?'good':trendPct>=40?'ok':'bad'}">${trendPct}%</div>
+      <div class="acc-m-lbl">Trend Signals</div>
+      <div class="acc-m-sub">Strong consensus</div>
+    </div>
+    <div class="acc-m">
+      <div class="acc-m-val ${avgVotes>=7?'good':avgVotes>=5?'ok':'bad'}">${avgVotes}</div>
+      <div class="acc-m-lbl">Avg Bull Votes</div>
+      <div class="acc-m-sub">Bullish results</div>
+    </div>
+    <div class="acc-m">
+      <div class="acc-m-val ${highConf>=10?'good':highConf>=5?'ok':'bad'}">${highConf}</div>
+      <div class="acc-m-lbl">High Confidence</div>
+      <div class="acc-m-sub">Score ≥ 70</div>
+    </div>
+    <div class="acc-m">
+      <div class="acc-m-val ${avgScore>=65?'good':avgScore>=50?'ok':'bad'}">${avgScore}</div>
+      <div class="acc-m-lbl">Avg Score</div>
+      <div class="acc-m-sub">All signals</div>
+    </div>
+    <div class="acc-m">
+      <div class="acc-m-val ${regMatch?'good':'bad'}">${regMatch?'✓ Yes':'✗ No'}</div>
+      <div class="acc-m-lbl">Regime Match</div>
+      <div class="acc-m-sub">Trend aligned</div>
+    </div>
+  </div>
+
+  <div class="acc-dist">
+    <div class="acc-dist-lbl">Signal Distribution</div>
+    <div class="acc-dist-bars">
+      <div class="acc-dist-row">
+        <span class="acc-dist-name">Trend</span>
+        <div class="acc-dist-track">
+          <div class="acc-dist-fill trend-fill" style="width:${Math.round(trendCount/total*100)}%"></div>
+        </div>
+        <span class="acc-dist-count">${trendCount}</span>
+      </div>
+      <div class="acc-dist-row">
+        <span class="acc-dist-name">Reversal</span>
+        <div class="acc-dist-track">
+          <div class="acc-dist-fill rev-fill" style="width:${Math.round(reversalCount/total*100)}%"></div>
+        </div>
+        <span class="acc-dist-count">${reversalCount}</span>
+      </div>
+      <div class="acc-dist-row">
+        <span class="acc-dist-name">Mixed</span>
+        <div class="acc-dist-track">
+          <div class="acc-dist-fill mix-fill" style="width:${Math.round(mixedCount/total*100)}%"></div>
+        </div>
+        <span class="acc-dist-count">${mixedCount}</span>
+      </div>
+    </div>
+  </div>
+</div>`;
 }
 
 // ── Sidebar stock list ────────────────────────────────────────────────────

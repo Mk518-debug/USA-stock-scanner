@@ -106,20 +106,87 @@ def scan():
     data_as_of = max(candles) if candles else ny_time()
 
     reg = market_regime_score()
+
+    # ── Scan quality metrics ──────────────────────────────────────────────────
+    total     = len(results)
+    bull_res  = [r for r in results if r['direction'] == 'Bullish']
+    bear_res  = [r for r in results if r['direction'] == 'Bearish']
+
+    # % of stocks with clear vote consensus (diff ≥ 3)
+    clear_sig = [r for r in results
+                 if abs(r.get('up_votes', 0) - r.get('down_votes', 0)) >= 3]
+    clarity_pct = int(len(clear_sig) / max(total, 1) * 100)
+
+    # % with Trend signal type
+    trend_pct = int(len([r for r in results if r.get('signal_type') == 'Trend'])
+                    / max(total, 1) * 100)
+
+    # Average up-votes on bullish results
+    avg_up_votes = (round(sum(r.get('up_votes', 0) for r in bull_res)
+                    / max(len(bull_res), 1), 1))
+
+    # High-confidence count (score ≥ 70)
+    high_conf = len([r for r in results if r['score'] >= 70])
+
+    # Average score
+    avg_score = round(sum(r['score'] for r in results) / max(total, 1), 1)
+
+    # Regime-direction match (bull regime + bullish majority or vice versa)
+    bull_majority = len(bull_res) > len(bear_res)
+    regime_match  = (reg >= 55 and bull_majority) or (reg <= 45 and not bull_majority)
+
+    # Quality score (0-100): blend of clarity, high-conf, avg-score, regime match
+    quality_score = int(
+        clarity_pct                          * 0.35
+        + (high_conf / max(total, 1) * 100) * 0.25
+        + min(100, avg_score)               * 0.30
+        + (10 if regime_match else 0)       * 0.10
+    )
+    quality_score = min(100, quality_score)
+
+    # Grade
+    scan_grade = ('A' if quality_score >= 80 else
+                  'B' if quality_score >= 65 else
+                  'C' if quality_score >= 50 else 'D')
+
+    # Insight string
+    if quality_score >= 80:
+        insight = ('Excellent market conditions. High-conviction signals across '
+                   f'{clarity_pct}% of results. Regime favors the prevailing trend.')
+    elif quality_score >= 65:
+        insight = (f'Good scan quality. {trend_pct}% trend signals. '
+                   'Monitor stops — mid-range volatility detected.')
+    elif quality_score >= 50:
+        insight = ('Mixed signals. Wait for higher vote consensus before entry. '
+                   'Prefer stocks with 7+ votes and Trend signal type.')
+    else:
+        insight = ('Low signal clarity. Market is choppy. '
+                   'Consider increasing Min Score or waiting for clearer conditions.')
+
     payload = {
-        'results':       results,
-        'total_scanned': len(results),
-        'total_found':   len(results),
-        'bullish_count': len([r for r in results if r['direction'] == 'Bullish']),
-        'bearish_count': len([r for r in results if r['direction'] == 'Bearish']),
-        'strong_count':  len([r for r in results if r['score'] >= 70]),
-        'timestamp':     ny_time(),
-        'data_as_of':    data_as_of,
-        'timeframe':     timeframe,
-        'source':        source,
-        'regime_score':  reg,
-        'regime_label':  regime_label(reg),
-        'from_cache':    False,
+        'results':         results,
+        'total_scanned':   total,
+        'total_found':     total,
+        'bullish_count':   len(bull_res),
+        'bearish_count':   len(bear_res),
+        'strong_count':    len([r for r in results if r['score'] >= 70]),
+        'timestamp':       ny_time(),
+        'data_as_of':      data_as_of,
+        'timeframe':       timeframe,
+        'source':          source,
+        'regime_score':    reg,
+        'regime_label':    regime_label(reg),
+        'from_cache':      False,
+        # ── Quality metrics ──
+        'quality_score':   quality_score,
+        'scan_grade':      scan_grade,
+        'clarity_pct':     clarity_pct,
+        'trend_pct':       trend_pct,
+        'avg_up_votes':    avg_up_votes,
+        'high_conf_count': high_conf,
+        'avg_score':       avg_score,
+        'regime_match':    regime_match,
+        'scan_insight':    insight,
     }
 
     _cset(cache_key, payload)
