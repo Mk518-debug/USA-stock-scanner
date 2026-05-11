@@ -26,8 +26,9 @@ _cache     = {}
 _CACHE_TTL = 900
 
 
-def _key(symbols, timeframe, min_score, sector):
-    return f"{','.join(sorted(symbols)) if symbols else sector}|{timeframe}|{min_score}"
+def _key(symbols, timeframe, min_score, sector, min_price=0, max_price=0, min_vol=0, market_cap='all'):
+    base = ','.join(sorted(symbols)) if symbols else sector
+    return f"{base}|{timeframe}|{min_score}|{min_price}-{max_price}|{min_vol}|{market_cap}"
 
 
 def _cget(key):
@@ -65,7 +66,7 @@ def scan():
 
     custom_syms = [s.strip().upper() for s in custom if s.strip()]
 
-    cache_key = _key(custom_syms, timeframe, min_score, sector)
+    cache_key = _key(custom_syms, timeframe, min_score, sector, min_price, max_price, min_vol, market_cap)
     if not force:
         cached = _cget(cache_key)
         if cached:
@@ -107,6 +108,15 @@ def scan():
                 r['tv_css']    = 'tv-na'
                 r['change_pct']= 0
             source = 'Yahoo Finance'
+
+    # ── Hard enforce price / volume filters on every result ──────────────────
+    # Guarantees the filter works for both TV and yfinance paths.
+    if min_price > 0:
+        results = [r for r in results if (r.get('price') or 0) >= min_price]
+    if max_price > 0:
+        results = [r for r in results if (r.get('price') or 0) <= max_price]
+    if min_vol > 0:
+        results = [r for r in results if (r.get('volume') or 0) >= min_vol]
 
     candles    = [r['last_candle'] for r in results if r.get('last_candle')]
     data_as_of = max(candles) if candles else ny_time()
