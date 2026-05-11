@@ -782,7 +782,7 @@ function buildCard(r) {
   <!-- ─── Footer ─── -->
   <div class="card-footer">
     <button class="cf-btn danger" onclick="dismissCard('${r.symbol}')" title="Dismiss" aria-label="Dismiss ${r.symbol}">✕</button>
-    <button class="cf-btn chart-btn" onclick="openChart('${r.symbol}','${r.tv_symbol||r.symbol}','${(r.name||'').replace(/'/g,'')}')">📊 Chart</button>
+    <a href="${tvLink}" target="_blank" rel="noopener" class="cf-btn chart-btn" title="Open chart in TradingView">📊 Chart</a>
     <button class="cf-btn${isW?' watch-active':''}" onclick="toggleWatch('${r.symbol}')">
       ${isW?'📌':'👁'} Watch
     </button>
