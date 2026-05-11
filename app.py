@@ -4,7 +4,7 @@ import traceback
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
-from tv_scanner import scan_tv
+from tv_scanner import scan_tv, fetch_analyst_tv
 from scanner import run_scan
 from stock_lists import get_symbols_by_sector, get_stock_info, SECTORS
 from news_fetch import fetch_news
@@ -252,46 +252,72 @@ def news():
 
 @app.route('/api/analyst', methods=['POST'])
 def analyst_rating():
-    data   = request.get_json(force=True) or {}
-    symbol = data.get('symbol', '').strip().upper()
+    data      = request.get_json(force=True) or {}
+    symbol    = data.get('symbol',    '').strip().upper()
+    tv_symbol = data.get('tv_symbol', '').strip()
     if not symbol:
         return jsonify({'error': 'No symbol'}), 400
 
-    cache_key = f'analyst|{symbol}'
+    cache_key = f'analyst_tv|{symbol}'
     cached = _cget(cache_key)
     if cached:
         cached['from_cache'] = True
         return jsonify(cached)
 
-    try:
-        ticker = yf.Ticker(symbol)
-        recs   = ticker.recommendations_summary
+    payload = None
 
-        if recs is not None and not recs.empty:
-            row = recs.iloc[0]
-            sb  = int(row.get('strongBuy',  0) or 0)
-            b   = int(row.get('buy',        0) or 0)
-            h   = int(row.get('hold',       0) or 0)
-            s   = int(row.get('sell',       0) or 0)
-            ss  = int(row.get('strongSell', 0) or 0)
-            payload = {
-                'symbol': symbol,
-                'strong_buy': sb, 'buy': b, 'hold': h,
-                'sell': s, 'strong_sell': ss,
-                'total': sb + b + h + s + ss,
-                'period': str(row.get('period', 'Recent')),
-                'from_cache': False,
-            }
-        else:
-            payload = {
-                'symbol': symbol, 'strong_buy': 0, 'buy': 0,
-                'hold': 0, 'sell': 0, 'strong_sell': 0,
-                'total': 0, 'period': 'N/A', 'from_cache': False,
-            }
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({'error': str(e), 'strong_buy': 0, 'buy': 0,
-                        'hold': 0, 'sell': 0, 'strong_sell': 0, 'total': 0}), 500
+    # ── 1. Try TradingView (primary source) ───────────────────────────────
+    if tv_symbol:
+        try:
+            tv = fetch_analyst_tv(tv_symbol)
+            if tv and tv['total'] > 0:
+                payload = {
+                    'symbol':    symbol,
+                    'source':    'TradingView',
+                    'buy':       tv['buy'],
+                    'hold':      tv['hold'],
+                    'sell':      tv['sell'],
+                    'total':     tv['total'],
+                    'target':    round(float(tv['target']),  2) if tv.get('target')  else None,
+                    'target_h':  round(float(tv['target_h']),2) if tv.get('target_h') else None,
+                    'target_l':  round(float(tv['target_l']),2) if tv.get('target_l') else None,
+                    'from_cache': False,
+                }
+        except Exception as e:
+            print(f'[TV analyst failed for {symbol}]: {e}')
+
+    # ── 2. Fallback: yfinance ─────────────────────────────────────────────
+    if not payload:
+        try:
+            ticker = yf.Ticker(symbol)
+            recs   = ticker.recommendations_summary
+            if recs is not None and not recs.empty:
+                row = recs.iloc[0]
+                sb  = int(row.get('strongBuy',  0) or 0)
+                b   = int(row.get('buy',        0) or 0)
+                h   = int(row.get('hold',       0) or 0)
+                s   = int(row.get('sell',       0) or 0)
+                ss  = int(row.get('strongSell', 0) or 0)
+                payload = {
+                    'symbol':    symbol,
+                    'source':    'Yahoo Finance',
+                    'buy':       b + sb,
+                    'hold':      h,
+                    'sell':      s + ss,
+                    'total':     sb + b + h + s + ss,
+                    'target':    None, 'target_h': None, 'target_l': None,
+                    'from_cache': False,
+                }
+        except Exception as e:
+            traceback.print_exc()
+
+    if not payload:
+        payload = {
+            'symbol': symbol, 'source': 'N/A',
+            'buy': 0, 'hold': 0, 'sell': 0, 'total': 0,
+            'target': None, 'target_h': None, 'target_l': None,
+            'from_cache': False,
+        }
 
     _cset(cache_key, payload)
     return jsonify(payload)

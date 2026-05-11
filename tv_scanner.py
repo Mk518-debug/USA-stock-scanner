@@ -117,6 +117,48 @@ def _signal_type_from_votes(up, down):
     return 'Mixed'
 
 
+def fetch_analyst_tv(tv_symbol):
+    """
+    Fetch Wall Street analyst consensus for a specific symbol from TradingView.
+    Returns dict with buy/hold/sell counts and price targets, or None on failure.
+    tv_symbol: exchange-prefixed ticker, e.g. 'NASDAQ:AAPL'
+    """
+    cols = [
+        'buy_count', 'sell_count', 'neutral_count',
+        'analyst_count',
+        'price_target_average', 'price_target_high', 'price_target_low',
+    ]
+    body = {
+        'symbols': {'tickers': [tv_symbol], 'query': {'types': []}},
+        'columns': cols,
+        'filter':  [],
+        'options': {'lang': 'en'},
+        'markets': ['america'],
+    }
+    try:
+        resp = requests.post(TV_URL, json=body, headers=_HEADERS, timeout=15)
+        resp.raise_for_status()
+        raw = resp.json()
+        if not raw.get('data'):
+            return None
+        cm = dict(zip(cols, raw['data'][0].get('d', [])))
+        buy   = int(cm.get('buy_count')      or 0)
+        sell  = int(cm.get('sell_count')     or 0)
+        hold  = int(cm.get('neutral_count')  or 0)
+        total = int(cm.get('analyst_count')  or 0) or (buy + hold + sell)
+        return {
+            'buy':      buy,
+            'hold':     hold,
+            'sell':     sell,
+            'total':    total,
+            'target':   cm.get('price_target_average'),
+            'target_h': cm.get('price_target_high'),
+            'target_l': cm.get('price_target_low'),
+        }
+    except Exception:
+        return None
+
+
 def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
             min_price=0, max_price=0, min_vol=0, market_cap='all'):
     sf  = _TF.get(timeframe, '')

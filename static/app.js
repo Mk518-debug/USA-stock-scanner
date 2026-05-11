@@ -775,7 +775,7 @@ function buildCard(r) {
   <!-- ─── Analyst Rating (lazy) ─── -->
   <div class="analyst-section">
     <button class="analyst-toggle" id="analyst_btn_${r.symbol}"
-            onclick="toggleAnalyst('${r.symbol}')">
+            onclick="toggleAnalyst('${r.symbol}','${r.tv_symbol||r.symbol}')">
       📊 Analyst Rating ▾
     </button>
     <div id="analyst_${r.symbol}" class="analyst-content" style="display:none"></div>
@@ -923,70 +923,76 @@ function closeChart() {
 //  ANALYST RATING GAUGE
 // ══════════════════════════════════════════════════════════════════════════
 
-// Arc points on circle (cx=100, cy=100, r=75) at 0°/36°/72°/108°/144°/180°
-// In SVG coords: x = 100 + 75*cos(θ), y = 100 - 75*sin(θ)
-const _ARC_PTS = [
-  [175.0, 100.0],   // 0°  — Strong Buy right
-  [160.7,  55.9],   // 36°
-  [123.2,  28.7],   // 72°
-  [ 76.8,  28.7],   // 108°
-  [ 39.3,  55.9],   // 144°
-  [ 25.0, 100.0],   // 180° — Strong Sell left
+// SVG arc points (cx=100,cy=100,r=75): angles 0°/60°/120°/180°
+// x = 100+75*cos(θ),  y = 100-75*sin(θ)
+// Three segments: Sell (left), Hold (centre), Buy (right)
+const _ARC3 = [
+  [175.0, 100.0],  // 0°  — right (Buy end)
+  [137.5,  35.1],  // 60°
+  [ 62.5,  35.1],  // 120°
+  [ 25.0, 100.0],  // 180° — left (Sell end)
 ];
-// Segments drawn right→left so the arc fills left (sell) to right (buy)
-const _SEG_COLORS = ['#ff5722','#ff9800','#c8b400','#69f0ae','#00bfa5']; // SS→SB
 
-function _buildGaugeSVG(sb, b, h, s, ss, total, period) {
+function _buildGaugeSVG(buy, hold, sell, total, target, targetH, targetL, source) {
   if (!total) return `<div class="ag-nodata">No analyst data available</div>`;
 
-  // Weighted score 1–5 (1=Strong Sell, 5=Strong Buy)
-  const score = (ss*1 + s*2 + h*3 + b*4 + sb*5) / total;
-  // Map 1–5 to angle 180°–0° (Strong Sell=left, Strong Buy=right)
-  const norm     = (score - 1) / 4;              // 0–1
-  const angleDeg = 180 - norm * 180;             // 180°→0°
+  // Score 1–3: sell=1, hold=2, buy=3
+  const score    = (buy * 3 + hold * 2 + sell * 1) / total;
+  // Map 1–3 → angle 180°→0°
+  const norm     = (score - 1) / 2;
+  const angleDeg = 180 - norm * 180;
   const angleRad = angleDeg * Math.PI / 180;
   const nx = (100 + 58 * Math.cos(angleRad)).toFixed(1);
   const ny = (100 - 58 * Math.sin(angleRad)).toFixed(1);
 
-  const label = score >= 4.5 ? 'Strong Buy'
-              : score >= 3.5 ? 'Buy'
-              : score >= 2.5 ? 'Neutral'
-              : score >= 1.5 ? 'Sell'
-              :                'Strong Sell';
-  const labelColor = score >= 4.5 ? '#00bfa5'
-                   : score >= 3.5 ? '#69f0ae'
-                   : score >= 2.5 ? '#ffd740'
-                   : score >= 1.5 ? '#ff9800'
+  const label      = score >= 2.6 ? 'Buy'
+                   : score >= 1.4 ? 'Neutral'
+                   :                'Sell';
+  const labelColor = score >= 2.6 ? '#00bfa5'
+                   : score >= 1.4 ? '#ffd740'
                    :                '#ff5722';
 
-  // Build 5 arc segments (left→right = Strong Sell→Strong Buy)
-  // Reverse _ARC_PTS so index 0 = left = Strong Sell
-  const pts = [..._ARC_PTS].reverse(); // 180°→0° order
-  const segs = _SEG_COLORS.map((col, i) => {
-    const [x1,y1] = pts[i];
-    const [x2,y2] = pts[i+1];
-    return `<path d="M ${x1},${y1} A 75,75 0 0,1 ${x2},${y2}"
-              fill="none" stroke="${col}" stroke-width="14" stroke-linecap="butt"/>`;
-  }).join('');
+  // 3-segment arc: Sell → Hold → Buy (left to right)
+  const segData = [
+    { x1:_ARC3[3][0], y1:_ARC3[3][1], x2:_ARC3[2][0], y2:_ARC3[2][1], col:'#ff5722' }, // Sell
+    { x1:_ARC3[2][0], y1:_ARC3[2][1], x2:_ARC3[1][0], y2:_ARC3[1][1], col:'#ffd740' }, // Hold
+    { x1:_ARC3[1][0], y1:_ARC3[1][1], x2:_ARC3[0][0], y2:_ARC3[0][1], col:'#00bfa5' }, // Buy
+  ];
+  const segs = segData.map(s =>
+    `<path d="M ${s.x1},${s.y1} A 75,75 0 0,1 ${s.x2},${s.y2}"
+       fill="none" stroke="${s.col}" stroke-width="14" stroke-linecap="butt"/>`
+  ).join('');
 
-  const pct = v => total ? Math.round(v / total * 100) : 0;
+  const pct = v => Math.round(v / total * 100);
+
+  const targetRow = target ? `
+    <div class="ag-targets">
+      <div class="ag-tgt-item">
+        <span class="ag-tgt-lbl">Avg Target</span>
+        <span class="ag-tgt-val">$${target}</span>
+      </div>
+      ${targetH ? `<div class="ag-tgt-item">
+        <span class="ag-tgt-lbl">High</span>
+        <span class="ag-tgt-val" style="color:var(--green)">$${targetH}</span>
+      </div>` : ''}
+      ${targetL ? `<div class="ag-tgt-item">
+        <span class="ag-tgt-lbl">Low</span>
+        <span class="ag-tgt-val" style="color:var(--red)">$${targetL}</span>
+      </div>` : ''}
+    </div>` : '';
 
   return `
 <div class="ag-wrap">
-  <div class="ag-title">Analyst Rating</div>
-  <div class="ag-sub">Based on ${total} analysts · ${period || 'recent'}</div>
+  <div class="ag-title">Analyst Rating <span class="ag-src">${source||'TradingView'}</span></div>
+  <div class="ag-sub">Based on ${total} analysts</div>
 
   <svg viewBox="0 0 200 115" class="ag-svg" xmlns="http://www.w3.org/2000/svg">
-    <!-- Background track -->
     <path d="M 25,100 A 75,75 0 0,1 175,100"
-          fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14" stroke-linecap="round"/>
-    <!-- Colored segments -->
+          fill="none" stroke="rgba(255,255,255,.07)" stroke-width="14" stroke-linecap="round"/>
     ${segs}
-    <!-- Zone labels -->
-    <text x="14"  y="112" font-size="6.5" fill="#666" text-anchor="middle">Strong&#10;Sell</text>
-    <text x="186" y="112" font-size="6.5" fill="#666" text-anchor="middle">Strong&#10;Buy</text>
-    <text x="100" y="18"  font-size="6.5" fill="#666" text-anchor="middle">Neutral</text>
-    <!-- Needle -->
+    <text x="16"  y="113" font-size="7" fill="#777" text-anchor="middle">Sell</text>
+    <text x="184" y="113" font-size="7" fill="#777" text-anchor="middle">Buy</text>
+    <text x="100" y="16"  font-size="7" fill="#777" text-anchor="middle">Neutral</text>
     <line x1="100" y1="100" x2="${nx}" y2="${ny}"
           stroke="white" stroke-width="2.5" stroke-linecap="round"/>
     <circle cx="100" cy="100" r="5" fill="white"/>
@@ -996,11 +1002,9 @@ function _buildGaugeSVG(sb, b, h, s, ss, total, period) {
 
   <div class="ag-bars">
     ${[
-      {lbl:'Strong buy', v:sb, col:'#00bfa5'},
-      {lbl:'Buy',        v:b,  col:'#69f0ae'},
-      {lbl:'Hold',       v:h,  col:'#888'},
-      {lbl:'Sell',       v:s,  col:'#ff9800'},
-      {lbl:'Strong sell',v:ss, col:'#ff5722'},
+      { lbl:'Buy',  v:buy,  col:'#00bfa5' },
+      { lbl:'Hold', v:hold, col:'#888888' },
+      { lbl:'Sell', v:sell, col:'#ff5722' },
     ].map(r => `
     <div class="ag-bar-row">
       <span class="ag-bar-lbl">${r.lbl}</span>
@@ -1010,10 +1014,11 @@ function _buildGaugeSVG(sb, b, h, s, ss, total, period) {
       <span class="ag-bar-num">${r.v}</span>
     </div>`).join('')}
   </div>
+  ${targetRow}
 </div>`;
 }
 
-async function toggleAnalyst(symbol) {
+async function toggleAnalyst(symbol, tvSymbol) {
   const content = document.getElementById(`analyst_${symbol}`);
   const btn     = document.getElementById(`analyst_btn_${symbol}`);
   if (!content) return;
@@ -1027,19 +1032,19 @@ async function toggleAnalyst(symbol) {
   if (btn) btn.textContent = '📊 Analyst Rating ▴';
   if (content.dataset.loaded) return;
 
-  content.innerHTML = '<div class="ag-loading"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>Loading analyst data…</div>';
+  content.innerHTML = '<div class="ag-loading"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>Loading from TradingView…</div>';
   try {
     const res = await fetch('/api/analyst', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ symbol }),
+      body: JSON.stringify({ symbol, tv_symbol: tvSymbol || '' }),
     });
     const d = await res.json();
     content.dataset.loaded = '1';
-    if (d.error && !d.total) {
+    if (!d.total) {
       content.innerHTML = '<div class="ag-nodata">No analyst data available</div>';
     } else {
-      content.innerHTML = _buildGaugeSVG(d.strong_buy||0, d.buy||0, d.hold||0,
-                                          d.sell||0, d.strong_sell||0, d.total||0, d.period);
+      content.innerHTML = _buildGaugeSVG(d.buy||0, d.hold||0, d.sell||0,
+                                          d.total||0, d.target, d.target_h, d.target_l, d.source);
     }
   } catch(e) {
     content.innerHTML = '<div class="ag-nodata">Failed to load — try again</div>';

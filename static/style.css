@@ -793,6 +793,15 @@ body.light .acc-panel { box-shadow: 0 1px 6px rgba(0,0,0,.07); }
 .ag-bar-fill  { height: 100%; border-radius: 4px; transition: width .5s ease; min-width: 2px; }
 .ag-bar-num   { font-size: 0.72rem; font-weight: 700; color: var(--text2); min-width: 24px; text-align: right; flex-shrink: 0; }
 
+/* Source badge */
+.ag-src { font-size: 0.6rem; font-weight: 600; color: var(--blue); background: rgba(68,138,255,.1); border: 1px solid rgba(68,138,255,.2); padding: 1px 6px; border-radius: 6px; margin-left: 6px; vertical-align: middle; }
+
+/* Price targets row */
+.ag-targets   { display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+.ag-tgt-item  { background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r-sm); padding: 6px 12px; text-align: center; min-width: 70px; }
+.ag-tgt-lbl   { display: block; font-size: 0.6rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.ag-tgt-val   { display: block; font-size: 0.88rem; font-weight: 800; color: var(--text); }
+
 /* Light-mode tweaks */
 body.light .ag-bar-track { background: rgba(0,0,0,.08); }
 body.light .analyst-toggle:hover { background: rgba(0,0,0,.03); }
