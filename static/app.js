@@ -775,7 +775,7 @@ function buildCard(r) {
   <!-- ─── Analyst Rating (lazy) ─── -->
   <div class="analyst-section">
     <button class="analyst-toggle" id="analyst_btn_${r.symbol}"
-            onclick="toggleAnalyst('${r.symbol}','${r.tv_symbol||r.symbol}')">
+            onclick="toggleAnalyst('${r.symbol}','${r.tv_symbol||r.symbol}',${r.tv_recommend??r.composite??null})">
       📊 Analyst Rating ▾
     </button>
     <div id="analyst_${r.symbol}" class="analyst-content" style="display:none"></div>
@@ -1018,7 +1018,7 @@ function _buildGaugeSVG(buy, hold, sell, total, target, targetH, targetL, source
 </div>`;
 }
 
-async function toggleAnalyst(symbol, tvSymbol) {
+async function toggleAnalyst(symbol, tvSymbol, tvRec) {
   const content = document.getElementById(`analyst_${symbol}`);
   const btn     = document.getElementById(`analyst_btn_${symbol}`);
   if (!content) return;
@@ -1036,19 +1036,77 @@ async function toggleAnalyst(symbol, tvSymbol) {
   try {
     const res = await fetch('/api/analyst', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ symbol, tv_symbol: tvSymbol || '' }),
+      body: JSON.stringify({ symbol, tv_symbol: tvSymbol || '', tv_rec: tvRec }),
     });
     const d = await res.json();
     content.dataset.loaded = '1';
-    if (!d.total) {
-      content.innerHTML = '<div class="ag-nodata">No analyst data available</div>';
-    } else {
+
+    if (d.total > 0) {
+      // Real analyst consensus data available
       content.innerHTML = _buildGaugeSVG(d.buy||0, d.hold||0, d.sell||0,
-                                          d.total||0, d.target, d.target_h, d.target_l, d.source);
+                                          d.total, d.target, d.target_h, d.target_l, d.source);
+    } else if (d.target) {
+      // Only price targets available, no count breakdown
+      content.innerHTML = _buildGaugeSVG(0, 0, 0, 0,
+                                          d.target, d.target_h, d.target_l, d.source);
+    } else if (d.tv_rec !== null && d.tv_rec !== undefined) {
+      // Fallback: use TradingView technical consensus (-1→1)
+      content.innerHTML = _buildTvRecGauge(d.tv_rec, d.source);
+    } else {
+      content.innerHTML = '<div class="ag-nodata">No analyst data available for this stock</div>';
     }
   } catch(e) {
     content.innerHTML = '<div class="ag-nodata">Failed to load — try again</div>';
   }
+}
+
+function _buildTvRecGauge(rec, source) {
+  // rec is TradingView Recommend.All (-1 to +1)
+  const norm     = (rec + 1) / 2;              // 0→1
+  const angleDeg = 180 - norm * 180;
+  const angleRad = angleDeg * Math.PI / 180;
+  const nx = (100 + 58 * Math.cos(angleRad)).toFixed(1);
+  const ny = (100 - 58 * Math.sin(angleRad)).toFixed(1);
+
+  const label      = rec >= 0.5  ? 'Strong Buy'
+                   : rec >= 0.1  ? 'Buy'
+                   : rec > -0.1  ? 'Neutral'
+                   : rec > -0.5  ? 'Sell'
+                   :               'Strong Sell';
+  const labelColor = rec >= 0.5  ? '#00bfa5'
+                   : rec >= 0.1  ? '#69f0ae'
+                   : rec > -0.1  ? '#ffd740'
+                   : rec > -0.5  ? '#ff9800'
+                   :               '#ff5722';
+
+  const segData = [
+    { x1:_ARC3[3][0], y1:_ARC3[3][1], x2:_ARC3[2][0], y2:_ARC3[2][1], col:'#ff5722' },
+    { x1:_ARC3[2][0], y1:_ARC3[2][1], x2:_ARC3[1][0], y2:_ARC3[1][1], col:'#ffd740' },
+    { x1:_ARC3[1][0], y1:_ARC3[1][1], x2:_ARC3[0][0], y2:_ARC3[0][1], col:'#00bfa5' },
+  ];
+  const segs = segData.map(s =>
+    `<path d="M ${s.x1},${s.y1} A 75,75 0 0,1 ${s.x2},${s.y2}"
+       fill="none" stroke="${s.col}" stroke-width="14" stroke-linecap="butt"/>`
+  ).join('');
+
+  return `
+<div class="ag-wrap">
+  <div class="ag-title">Technical Consensus <span class="ag-src">TradingView</span></div>
+  <div class="ag-sub">Based on TradingView's 26-indicator rating</div>
+  <svg viewBox="0 0 200 115" class="ag-svg" xmlns="http://www.w3.org/2000/svg">
+    <path d="M 25,100 A 75,75 0 0,1 175,100"
+          fill="none" stroke="rgba(255,255,255,.07)" stroke-width="14" stroke-linecap="round"/>
+    ${segs}
+    <text x="16"  y="113" font-size="7" fill="#777" text-anchor="middle">Sell</text>
+    <text x="184" y="113" font-size="7" fill="#777" text-anchor="middle">Buy</text>
+    <text x="100" y="16"  font-size="7" fill="#777" text-anchor="middle">Neutral</text>
+    <line x1="100" y1="100" x2="${nx}" y2="${ny}"
+          stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="100" cy="100" r="5" fill="white"/>
+  </svg>
+  <div class="ag-label" style="color:${labelColor}">${label}</div>
+  <div class="ag-sub" style="margin-top:8px">Score: ${(rec*100).toFixed(0)} / 100</div>
+</div>`;
 }
 
 // ══════════════════════════════════════════════════════════════════════════

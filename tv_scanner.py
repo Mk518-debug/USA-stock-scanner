@@ -119,19 +119,20 @@ def _signal_type_from_votes(up, down):
 
 def fetch_analyst_tv(tv_symbol):
     """
-    Fetch Wall Street analyst consensus for a specific symbol from TradingView.
-    Returns dict with buy/hold/sell counts and price targets, or None on failure.
-    tv_symbol: exchange-prefixed ticker, e.g. 'NASDAQ:AAPL'
+    Fetch Wall Street analyst consensus for one symbol from TradingView.
+    Tries multiple known column-name variants; returns dict or None.
     """
+    # TradingView exposes analyst data under these column names
     cols = [
-        'buy_count', 'sell_count', 'neutral_count',
+        'Recommend.All',           # technical consensus (-1→1), used as fallback
         'analyst_count',
+        'buy_count',   'sell_count',   'neutral_count',   # primary candidate names
+        'Analysts.Buy','Analysts.Sell','Analysts.Neutral', # alternative names
         'price_target_average', 'price_target_high', 'price_target_low',
     ]
     body = {
-        'symbols': {'tickers': [tv_symbol], 'query': {'types': []}},
+        'symbols': {'tickers': [tv_symbol]},
         'columns': cols,
-        'filter':  [],
         'options': {'lang': 'en'},
         'markets': ['america'],
     }
@@ -141,21 +142,47 @@ def fetch_analyst_tv(tv_symbol):
         raw = resp.json()
         if not raw.get('data'):
             return None
+
         cm = dict(zip(cols, raw['data'][0].get('d', [])))
-        buy   = int(cm.get('buy_count')      or 0)
-        sell  = int(cm.get('sell_count')     or 0)
-        hold  = int(cm.get('neutral_count')  or 0)
-        total = int(cm.get('analyst_count')  or 0) or (buy + hold + sell)
-        return {
-            'buy':      buy,
-            'hold':     hold,
-            'sell':     sell,
-            'total':    total,
-            'target':   cm.get('price_target_average'),
-            'target_h': cm.get('price_target_high'),
-            'target_l': cm.get('price_target_low'),
-        }
-    except Exception:
+
+        # Try primary names, then alternatives
+        def _i(k1, k2=None):
+            v = cm.get(k1) or (cm.get(k2) if k2 else None)
+            return int(v) if v is not None else None
+
+        buy  = _i('buy_count',  'Analysts.Buy')
+        sell = _i('sell_count', 'Analysts.Sell')
+        hold = _i('neutral_count', 'Analysts.Neutral')
+        analyst_count = _i('analyst_count')
+        total = analyst_count or ((buy or 0) + (hold or 0) + (sell or 0))
+
+        # Only return counts if we got real data
+        if total and total > 0 and (buy is not None or hold is not None):
+            return {
+                'buy':      buy  or 0,
+                'hold':     hold or 0,
+                'sell':     sell or 0,
+                'total':    total,
+                'target':   cm.get('price_target_average'),
+                'target_h': cm.get('price_target_high'),
+                'target_l': cm.get('price_target_low'),
+                'rec_all':  cm.get('Recommend.All'),  # kept for reference
+            }
+
+        # If analyst counts not available but price targets exist, return targets only
+        target = cm.get('price_target_average')
+        if target:
+            return {
+                'buy': 0, 'hold': 0, 'sell': 0, 'total': 0,
+                'target':   target,
+                'target_h': cm.get('price_target_high'),
+                'target_l': cm.get('price_target_low'),
+                'rec_all':  cm.get('Recommend.All'),
+            }
+
+        return None
+    except Exception as e:
+        print(f'[fetch_analyst_tv {tv_symbol}] {e}')
         return None
 
 

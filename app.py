@@ -1,6 +1,7 @@
 import os
 import time
 import traceback
+import pandas as pd
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
@@ -252,72 +253,91 @@ def news():
 
 @app.route('/api/analyst', methods=['POST'])
 def analyst_rating():
-    data      = request.get_json(force=True) or {}
-    symbol    = data.get('symbol',    '').strip().upper()
-    tv_symbol = data.get('tv_symbol', '').strip()
+    data       = request.get_json(force=True) or {}
+    symbol     = data.get('symbol',    '').strip().upper()
+    tv_symbol  = data.get('tv_symbol', '').strip()
+    tv_rec_raw = data.get('tv_rec')        # Recommend.All from scan (-1→1)
     if not symbol:
         return jsonify({'error': 'No symbol'}), 400
 
-    cache_key = f'analyst_tv|{symbol}'
+    cache_key = f'analyst_tv2|{symbol}'
     cached = _cget(cache_key)
     if cached:
         cached['from_cache'] = True
         return jsonify(cached)
 
-    payload = None
+    buy = hold = sell = total = 0
+    target = target_h = target_l = None
+    source = 'N/A'
 
-    # ── 1. Try TradingView (primary source) ───────────────────────────────
+    # ── 1. TradingView screener ───────────────────────────────────────────
     if tv_symbol:
         try:
             tv = fetch_analyst_tv(tv_symbol)
-            if tv and tv['total'] > 0:
-                payload = {
-                    'symbol':    symbol,
-                    'source':    'TradingView',
-                    'buy':       tv['buy'],
-                    'hold':      tv['hold'],
-                    'sell':      tv['sell'],
-                    'total':     tv['total'],
-                    'target':    round(float(tv['target']),  2) if tv.get('target')  else None,
-                    'target_h':  round(float(tv['target_h']),2) if tv.get('target_h') else None,
-                    'target_l':  round(float(tv['target_l']),2) if tv.get('target_l') else None,
-                    'from_cache': False,
-                }
+            if tv:
+                buy, hold, sell = tv['buy'], tv['hold'], tv['sell']
+                total = tv['total']
+                if tv.get('target'):    target   = round(float(tv['target']),   2)
+                if tv.get('target_h'):  target_h = round(float(tv['target_h']), 2)
+                if tv.get('target_l'):  target_l = round(float(tv['target_l']), 2)
+                if total > 0:           source   = 'TradingView'
         except Exception as e:
-            print(f'[TV analyst failed for {symbol}]: {e}')
+            print(f'[TV analyst {symbol}] {e}')
 
-    # ── 2. Fallback: yfinance ─────────────────────────────────────────────
-    if not payload:
+    # ── 2. yfinance — recommendations_summary ────────────────────────────
+    if total == 0:
         try:
             ticker = yf.Ticker(symbol)
             recs   = ticker.recommendations_summary
             if recs is not None and not recs.empty:
                 row = recs.iloc[0]
-                sb  = int(row.get('strongBuy',  0) or 0)
-                b   = int(row.get('buy',        0) or 0)
-                h   = int(row.get('hold',       0) or 0)
-                s   = int(row.get('sell',       0) or 0)
-                ss  = int(row.get('strongSell', 0) or 0)
-                payload = {
-                    'symbol':    symbol,
-                    'source':    'Yahoo Finance',
-                    'buy':       b + sb,
-                    'hold':      h,
-                    'sell':      s + ss,
-                    'total':     sb + b + h + s + ss,
-                    'target':    None, 'target_h': None, 'target_l': None,
-                    'from_cache': False,
-                }
-        except Exception as e:
-            traceback.print_exc()
+                def _gi(k): return int(row[k] if k in row.index else 0) if not pd.isna(row.get(k, 0)) else 0
+                sb  = _gi('strongBuy');  b = _gi('buy')
+                h   = _gi('hold');       s = _gi('sell'); ss = _gi('strongSell')
+                total = sb + b + h + s + ss
+                if total > 0:
+                    buy = sb + b; hold = h; sell = s + ss
+                    source = 'Yahoo Finance'
+        except Exception:
+            pass
 
-    if not payload:
-        payload = {
-            'symbol': symbol, 'source': 'N/A',
-            'buy': 0, 'hold': 0, 'sell': 0, 'total': 0,
-            'target': None, 'target_h': None, 'target_l': None,
-            'from_cache': False,
-        }
+    # ── 3. yfinance — analyst_price_targets (targets only) ───────────────
+    if target is None:
+        try:
+            ticker = yf.Ticker(symbol)
+            apt    = ticker.analyst_price_targets
+            if isinstance(apt, dict) and apt.get('mean'):
+                target   = round(float(apt['mean']), 2)
+                target_h = round(float(apt['high']), 2) if apt.get('high') else None
+                target_l = round(float(apt['low']),  2) if apt.get('low')  else None
+                if total == 0 and apt.get('numberOfAnalysts'):
+                    total = int(apt['numberOfAnalysts'])
+                    buy   = total   # treat all as buy if only target data available
+                    source = 'Yahoo Finance'
+        except Exception:
+            pass
+
+    # ── 4. TV technical consensus fallback (always available from scan) ───
+    tv_rec = None
+    if tv_rec_raw is not None:
+        try:
+            tv_rec = float(tv_rec_raw)
+        except Exception:
+            pass
+
+    payload = {
+        'symbol':    symbol,
+        'source':    source,
+        'buy':       buy,
+        'hold':      hold,
+        'sell':      sell,
+        'total':     total,
+        'target':    target,
+        'target_h':  target_h,
+        'target_l':  target_l,
+        'tv_rec':    tv_rec,   # -1→1 technical consensus, always shown if counts unavailable
+        'from_cache': False,
+    }
 
     _cset(cache_key, payload)
     return jsonify(payload)
