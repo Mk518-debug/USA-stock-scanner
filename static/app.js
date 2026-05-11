@@ -772,6 +772,15 @@ function buildCard(r) {
     <div class="sk-agree">Agree: ${r.last_candle||'—'} (${upV} indicators) ↺</div>
   </div>
 
+  <!-- ─── Analyst Rating (lazy) ─── -->
+  <div class="analyst-section">
+    <button class="analyst-toggle" id="analyst_btn_${r.symbol}"
+            onclick="toggleAnalyst('${r.symbol}')">
+      📊 Analyst Rating ▾
+    </button>
+    <div id="analyst_${r.symbol}" class="analyst-content" style="display:none"></div>
+  </div>
+
   <!-- ─── Support / Resistance ─── -->
   ${(r.support||r.resistance) ? `
   <div class="sk-sr-row">
@@ -908,6 +917,133 @@ function _loadChartIframe() {
 function closeChart() {
   document.getElementById('chartModal').style.display = 'none';
   document.getElementById('chartIframe').src = '';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  ANALYST RATING GAUGE
+// ══════════════════════════════════════════════════════════════════════════
+
+// Arc points on circle (cx=100, cy=100, r=75) at 0°/36°/72°/108°/144°/180°
+// In SVG coords: x = 100 + 75*cos(θ), y = 100 - 75*sin(θ)
+const _ARC_PTS = [
+  [175.0, 100.0],   // 0°  — Strong Buy right
+  [160.7,  55.9],   // 36°
+  [123.2,  28.7],   // 72°
+  [ 76.8,  28.7],   // 108°
+  [ 39.3,  55.9],   // 144°
+  [ 25.0, 100.0],   // 180° — Strong Sell left
+];
+// Segments drawn right→left so the arc fills left (sell) to right (buy)
+const _SEG_COLORS = ['#ff5722','#ff9800','#c8b400','#69f0ae','#00bfa5']; // SS→SB
+
+function _buildGaugeSVG(sb, b, h, s, ss, total, period) {
+  if (!total) return `<div class="ag-nodata">No analyst data available</div>`;
+
+  // Weighted score 1–5 (1=Strong Sell, 5=Strong Buy)
+  const score = (ss*1 + s*2 + h*3 + b*4 + sb*5) / total;
+  // Map 1–5 to angle 180°–0° (Strong Sell=left, Strong Buy=right)
+  const norm     = (score - 1) / 4;              // 0–1
+  const angleDeg = 180 - norm * 180;             // 180°→0°
+  const angleRad = angleDeg * Math.PI / 180;
+  const nx = (100 + 58 * Math.cos(angleRad)).toFixed(1);
+  const ny = (100 - 58 * Math.sin(angleRad)).toFixed(1);
+
+  const label = score >= 4.5 ? 'Strong Buy'
+              : score >= 3.5 ? 'Buy'
+              : score >= 2.5 ? 'Neutral'
+              : score >= 1.5 ? 'Sell'
+              :                'Strong Sell';
+  const labelColor = score >= 4.5 ? '#00bfa5'
+                   : score >= 3.5 ? '#69f0ae'
+                   : score >= 2.5 ? '#ffd740'
+                   : score >= 1.5 ? '#ff9800'
+                   :                '#ff5722';
+
+  // Build 5 arc segments (left→right = Strong Sell→Strong Buy)
+  // Reverse _ARC_PTS so index 0 = left = Strong Sell
+  const pts = [..._ARC_PTS].reverse(); // 180°→0° order
+  const segs = _SEG_COLORS.map((col, i) => {
+    const [x1,y1] = pts[i];
+    const [x2,y2] = pts[i+1];
+    return `<path d="M ${x1},${y1} A 75,75 0 0,1 ${x2},${y2}"
+              fill="none" stroke="${col}" stroke-width="14" stroke-linecap="butt"/>`;
+  }).join('');
+
+  const pct = v => total ? Math.round(v / total * 100) : 0;
+
+  return `
+<div class="ag-wrap">
+  <div class="ag-title">Analyst Rating</div>
+  <div class="ag-sub">Based on ${total} analysts · ${period || 'recent'}</div>
+
+  <svg viewBox="0 0 200 115" class="ag-svg" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background track -->
+    <path d="M 25,100 A 75,75 0 0,1 175,100"
+          fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14" stroke-linecap="round"/>
+    <!-- Colored segments -->
+    ${segs}
+    <!-- Zone labels -->
+    <text x="14"  y="112" font-size="6.5" fill="#666" text-anchor="middle">Strong&#10;Sell</text>
+    <text x="186" y="112" font-size="6.5" fill="#666" text-anchor="middle">Strong&#10;Buy</text>
+    <text x="100" y="18"  font-size="6.5" fill="#666" text-anchor="middle">Neutral</text>
+    <!-- Needle -->
+    <line x1="100" y1="100" x2="${nx}" y2="${ny}"
+          stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="100" cy="100" r="5" fill="white"/>
+  </svg>
+
+  <div class="ag-label" style="color:${labelColor}">${label}</div>
+
+  <div class="ag-bars">
+    ${[
+      {lbl:'Strong buy', v:sb, col:'#00bfa5'},
+      {lbl:'Buy',        v:b,  col:'#69f0ae'},
+      {lbl:'Hold',       v:h,  col:'#888'},
+      {lbl:'Sell',       v:s,  col:'#ff9800'},
+      {lbl:'Strong sell',v:ss, col:'#ff5722'},
+    ].map(r => `
+    <div class="ag-bar-row">
+      <span class="ag-bar-lbl">${r.lbl}</span>
+      <div class="ag-bar-track">
+        <div class="ag-bar-fill" style="width:${pct(r.v)}%;background:${r.col}"></div>
+      </div>
+      <span class="ag-bar-num">${r.v}</span>
+    </div>`).join('')}
+  </div>
+</div>`;
+}
+
+async function toggleAnalyst(symbol) {
+  const content = document.getElementById(`analyst_${symbol}`);
+  const btn     = document.getElementById(`analyst_btn_${symbol}`);
+  if (!content) return;
+
+  if (content.style.display !== 'none') {
+    content.style.display = 'none';
+    if (btn) btn.textContent = '📊 Analyst Rating ▾';
+    return;
+  }
+  content.style.display = 'block';
+  if (btn) btn.textContent = '📊 Analyst Rating ▴';
+  if (content.dataset.loaded) return;
+
+  content.innerHTML = '<div class="ag-loading"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>Loading analyst data…</div>';
+  try {
+    const res = await fetch('/api/analyst', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ symbol }),
+    });
+    const d = await res.json();
+    content.dataset.loaded = '1';
+    if (d.error && !d.total) {
+      content.innerHTML = '<div class="ag-nodata">No analyst data available</div>';
+    } else {
+      content.innerHTML = _buildGaugeSVG(d.strong_buy||0, d.buy||0, d.hold||0,
+                                          d.sell||0, d.strong_sell||0, d.total||0, d.period);
+    }
+  } catch(e) {
+    content.innerHTML = '<div class="ag-nodata">Failed to load — try again</div>';
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════

@@ -250,6 +250,53 @@ def news():
     return jsonify(payload)
 
 
+@app.route('/api/analyst', methods=['POST'])
+def analyst_rating():
+    data   = request.get_json(force=True) or {}
+    symbol = data.get('symbol', '').strip().upper()
+    if not symbol:
+        return jsonify({'error': 'No symbol'}), 400
+
+    cache_key = f'analyst|{symbol}'
+    cached = _cget(cache_key)
+    if cached:
+        cached['from_cache'] = True
+        return jsonify(cached)
+
+    try:
+        ticker = yf.Ticker(symbol)
+        recs   = ticker.recommendations_summary
+
+        if recs is not None and not recs.empty:
+            row = recs.iloc[0]
+            sb  = int(row.get('strongBuy',  0) or 0)
+            b   = int(row.get('buy',        0) or 0)
+            h   = int(row.get('hold',       0) or 0)
+            s   = int(row.get('sell',       0) or 0)
+            ss  = int(row.get('strongSell', 0) or 0)
+            payload = {
+                'symbol': symbol,
+                'strong_buy': sb, 'buy': b, 'hold': h,
+                'sell': s, 'strong_sell': ss,
+                'total': sb + b + h + s + ss,
+                'period': str(row.get('period', 'Recent')),
+                'from_cache': False,
+            }
+        else:
+            payload = {
+                'symbol': symbol, 'strong_buy': 0, 'buy': 0,
+                'hold': 0, 'sell': 0, 'strong_sell': 0,
+                'total': 0, 'period': 'N/A', 'from_cache': False,
+            }
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'strong_buy': 0, 'buy': 0,
+                        'hold': 0, 'sell': 0, 'strong_sell': 0, 'total': 0}), 500
+
+    _cset(cache_key, payload)
+    return jsonify(payload)
+
+
 @app.route('/api/sectors')
 def sectors():
     return jsonify(SECTORS)
