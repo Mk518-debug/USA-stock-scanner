@@ -52,12 +52,16 @@ def index():
 
 @app.route('/api/scan', methods=['POST'])
 def scan():
-    data      = request.get_json(force=True)
-    timeframe = data.get('timeframe', '1d')
-    min_score = int(data.get('min_score', 40))
-    sector    = data.get('sector', 'all')
-    custom    = data.get('symbols', [])
-    force     = data.get('force', False)
+    data       = request.get_json(force=True)
+    timeframe  = data.get('timeframe', '1d')
+    min_score  = int(data.get('min_score', 40))
+    sector     = data.get('sector', 'all')
+    custom     = data.get('symbols', [])
+    force      = data.get('force', False)
+    min_price  = float(data.get('min_price',  0) or 0)
+    max_price  = float(data.get('max_price',  0) or 0)
+    min_vol    = int(data.get('min_volume',   0) or 0)
+    market_cap = data.get('market_cap', 'all')
 
     custom_syms = [s.strip().upper() for s in custom if s.strip()]
 
@@ -86,7 +90,9 @@ def scan():
     else:
         # General scan: use TradingView screener (fast, real-time, + TV ratings)
         try:
-            results = scan_tv(sector=sector, timeframe=timeframe, min_score=min_score)
+            results = scan_tv(sector=sector, timeframe=timeframe, min_score=min_score,
+                              min_price=min_price, max_price=max_price,
+                              min_vol=min_vol, market_cap=market_cap)
         except Exception as e:
             print(f"[TV scan failed: {e}] — falling back to yfinance")
             symbols = get_symbols_by_sector(sector)

@@ -31,6 +31,121 @@ let lastTF      = '1d';
 let searchQuery = '';
 let watchedSet  = new Set();
 let dismissSet  = new Set();
+let marketCap   = 'all';
+let _chartSymbol = '';
+let _chartTvSym  = '';
+let scanHistory  = [];
+
+// ── localStorage: persist watchlist + settings ───────────────────────────
+function saveWatchlist() {
+  try { localStorage.setItem('usa_watched', JSON.stringify([...watchedSet])); } catch(e) {}
+}
+(function loadWatchlist() {
+  try {
+    const s = localStorage.getItem('usa_watched');
+    if (s) watchedSet = new Set(JSON.parse(s));
+  } catch(e) {}
+})();
+
+function saveSettings() {
+  try {
+    localStorage.setItem('usa_settings', JSON.stringify({
+      tf: lastTF, scanType,
+      minScore: document.getElementById('minScore')?.value || 50,
+      sector:   document.getElementById('sectorSel')?.value || 'all',
+      minPrice: document.getElementById('minPrice')?.value || '',
+      maxPrice: document.getElementById('maxPrice')?.value || '',
+      minVol:   document.getElementById('minVolume')?.value || 0,
+      mktCap:   marketCap,
+    }));
+  } catch(e) {}
+}
+(function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('usa_settings') || 'null');
+    if (!s) return;
+    if (s.minScore) {
+      const el = document.getElementById('minScore');
+      if (el) { el.value = s.minScore; document.getElementById('scoreDisplay').textContent = s.minScore; }
+    }
+    if (s.sector) { const el = document.getElementById('sectorSel'); if (el) el.value = s.sector; }
+    if (s.minPrice) { const el = document.getElementById('minPrice'); if (el) el.value = s.minPrice; }
+    if (s.maxPrice) { const el = document.getElementById('maxPrice'); if (el) el.value = s.maxPrice; }
+    if (s.minVol)   { const el = document.getElementById('minVolume'); if (el) { el.value = s.minVol; updateVolLabel(s.minVol); } }
+    if (s.mktCap)   {
+      marketCap = s.mktCap;
+      document.querySelectorAll('#mktCapGroup .seg-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.cap === s.mktCap));
+    }
+    if (s.tf) {
+      lastTF = s.tf;
+      document.querySelectorAll('#tfGroup .seg-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.tf === s.tf));
+    }
+    if (s.scanType) {
+      scanType = s.scanType;
+      document.querySelectorAll('#scanTypeGroup .seg-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.type === s.scanType));
+    }
+  } catch(e) {}
+})();
+
+// ── Scan history ──────────────────────────────────────────────────────────
+(function loadHistory() {
+  try { scanHistory = JSON.parse(localStorage.getItem('usa_history') || '[]'); } catch(e) {}
+  renderHistory();
+})();
+
+function saveScanToHistory(d) {
+  const entry = {
+    ts:        d.timestamp,
+    total:     d.total_scanned,
+    bullish:   d.bullish_count,
+    quality:   d.quality_score,
+    grade:     d.scan_grade,
+    tf:        d.timeframe,
+    tops:      (d.results || []).slice(0, 5).map(r => r.symbol),
+  };
+  scanHistory = [entry, ...scanHistory.filter(e => e.ts !== entry.ts)].slice(0, 5);
+  try { localStorage.setItem('usa_history', JSON.stringify(scanHistory)); } catch(e) {}
+  renderHistory();
+}
+
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  const cnt = document.getElementById('histCount');
+  if (!el) return;
+  if (cnt) cnt.textContent = scanHistory.length ? `(${scanHistory.length})` : '';
+  if (!scanHistory.length) { el.innerHTML = '<div class="sl-empty">No history yet</div>'; return; }
+  el.innerHTML = scanHistory.map((h, i) => `
+    <div class="hist-item">
+      <div class="hist-top">
+        <span class="hist-grade grade-badge ${(h.grade||'d').toLowerCase()}">${h.grade||'—'}</span>
+        <span class="hist-tf">${h.tf||'1D'}</span>
+        <span class="hist-score">${h.quality||0}/100</span>
+        <span class="hist-time">${h.ts||''}</span>
+      </div>
+      <div class="hist-syms">${(h.tops||[]).join(' · ')}</div>
+    </div>`).join('');
+}
+
+function toggleHistory() {
+  const el = document.getElementById('historyList');
+  const ar = document.getElementById('histArrow');
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if (ar) ar.textContent = open ? '▾' : '▴';
+}
+
+// ── Volume label helper ───────────────────────────────────────────────────
+function updateVolLabel(val) {
+  const n = parseInt(val) || 0;
+  const el = document.getElementById('volDisplay');
+  if (!el) return;
+  if (n === 0) { el.textContent = 'Any'; return; }
+  el.textContent = n >= 1_000_000 ? (n/1_000_000).toFixed(1)+'M' : Math.round(n/1000)+'K';
+}
 
 // ── Theme ─────────────────────────────────────────────────────────────────
 function applyTheme(light) {
@@ -80,6 +195,7 @@ function wireSegs(groupId, onSelect) {
 }
 wireSegs('scanTypeGroup', btn => { scanType = btn.dataset.type; render(); });
 wireSegs('tfGroup',       btn => { lastTF   = btn.dataset.tf; });
+wireSegs('mktCapGroup',   btn => { marketCap = btn.dataset.cap; });
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 document.querySelectorAll('.ftab').forEach(tab => {
@@ -118,13 +234,20 @@ async function startScan(force = false) {
   const isCustom  = document.getElementById('mtCustom').classList.contains('active');
   const symRaw    = document.getElementById('symInput').value;
   const symbols   = isCustom ? symRaw.split(/[\n,]+/).map(s=>s.trim().toUpperCase()).filter(Boolean) : [];
+  const minPrice  = parseFloat(document.getElementById('minPrice')?.value) || 0;
+  const maxPrice  = parseFloat(document.getElementById('maxPrice')?.value) || 0;
+  const minVol    = parseInt(document.getElementById('minVolume')?.value)  || 0;
   lastTF = timeframe;
+  saveSettings();
 
   setLoading(true);
+  startProgressAnim(symbols.length || 200);
   try {
     const res  = await fetch('/api/scan', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ timeframe, min_score: minScore, sector, symbols, force }),
+      body: JSON.stringify({ timeframe, min_score: minScore, sector, symbols, force,
+                             min_price: minPrice, max_price: maxPrice,
+                             min_volume: minVol, market_cap: marketCap }),
     });
     const text = await res.text();
     let data;
@@ -134,6 +257,7 @@ async function startScan(force = false) {
     allResults = data.results;
     updateStats(data);
     populateStockList(data.results);
+    saveScanToHistory(data);
 
     document.getElementById('statsTop').style.display  = 'grid';
     document.getElementById('filterBar').style.display = 'flex';
@@ -142,7 +266,6 @@ async function startScan(force = false) {
     activeTab = 'all';
     render();
     showAccuracyReport(data);
-    // Recalculate after sticky-bars grows (stats + filter now visible)
     requestAnimationFrame(fitScrollZones);
   } catch (err) {
     document.getElementById('cardsArea').innerHTML = `<div class="error-msg">❌ ${err.message}</div>`;
@@ -573,9 +696,9 @@ function buildCard(r) {
   <!-- ─── Footer ─── -->
   <div class="card-footer">
     <button class="cf-btn danger" onclick="dismissCard('${r.symbol}')" title="Dismiss">✕</button>
-    <a href="${tvLink}" target="_blank" rel="noopener" class="cf-btn chart-btn">Details ▼</a>
+    <button class="cf-btn chart-btn" onclick="openChart('${r.symbol}','${r.tv_symbol||r.symbol}','${(r.name||'').replace(/'/g,'')}')">📊 Chart</button>
     <button class="cf-btn${isW?' watch-active':''}" onclick="toggleWatch('${r.symbol}')">
-      ${isW?'📌 Watching':'Scan ⊘'}
+      ${isW?'📌 Watching':'👁 Watch'}
     </button>
     <span class="sk-votes">${dnV}↓ | ${upV}↑</span>
   </div>
@@ -601,6 +724,7 @@ function calcTargets(symbol, atr, direction) {
 
 function toggleWatch(symbol) {
   watchedSet.has(symbol) ? watchedSet.delete(symbol) : watchedSet.add(symbol);
+  saveWatchlist();
   render();
 }
 
@@ -623,6 +747,76 @@ function setLoading(on) {
   const txt = document.getElementById('scanBtnText');
   if (txt && !on) txt.textContent = '🔍 START SCAN';
   if (txt && on)  txt.textContent = '⏳ SCANNING…';
+  if (!on) stopProgressAnim();
+}
+
+// ── Progress animation ────────────────────────────────────────────────────
+let _progTimer = null;
+let _progVal   = 0;
+
+function startProgressAnim(total) {
+  _progVal = 0;
+  const fill = document.getElementById('overlayProgressFill');
+  const note = document.getElementById('overlayNote');
+  if (fill) fill.style.width = '0%';
+  if (note) note.textContent = 'Connecting to data source…';
+
+  let step = 0;
+  const msgs = [
+    'Fetching real-time quotes…',
+    `Analyzing ${Math.round(total * 0.3)} stocks…`,
+    `Analyzing ${Math.round(total * 0.6)} stocks…`,
+    `Analyzing ${Math.round(total * 0.85)} stocks…`,
+    'Computing indicators…',
+    'Ranking signals…',
+    'Almost done…',
+  ];
+  _progTimer = setInterval(() => {
+    // Fast to 80%, then slow
+    const target = step < msgs.length - 1 ? (step + 1) / msgs.length * 82 : 90;
+    _progVal = Math.min(_progVal + (target - _progVal) * 0.3, 90);
+    if (fill) fill.style.width = _progVal + '%';
+    if (note && step < msgs.length) note.textContent = msgs[step] || '';
+    step++;
+    if (step >= msgs.length) clearInterval(_progTimer);
+  }, 800);
+}
+
+function stopProgressAnim() {
+  clearInterval(_progTimer);
+  const fill = document.getElementById('overlayProgressFill');
+  if (fill) { fill.style.width = '100%'; setTimeout(() => { fill.style.width = '0%'; }, 400); }
+}
+
+// ── Chart Modal ───────────────────────────────────────────────────────────
+function openChart(symbol, tvSymbol, name) {
+  _chartSymbol = tvSymbol || symbol;
+  document.getElementById('chartSym').textContent  = symbol;
+  document.getElementById('chartName').textContent = name ? ' — ' + name : '';
+  // Match chart TF to current scan TF
+  const tfMap = { '1d':'D', '4h':'240', '1h':'60', '15m':'15' };
+  const sel = document.getElementById('chartTfSel');
+  if (sel) sel.value = tfMap[lastTF] || 'D';
+  _loadChartIframe();
+  document.getElementById('chartModal').style.display = 'flex';
+}
+
+function reloadChart() { _loadChartIframe(); }
+
+function _loadChartIframe() {
+  const theme    = document.body.classList.contains('light') ? 'light' : 'dark';
+  const interval = document.getElementById('chartTfSel')?.value || 'D';
+  const sym      = encodeURIComponent(_chartSymbol);
+  const url = `https://www.tradingview.com/widgetembed/?symbol=${sym}&interval=${interval}` +
+              `&theme=${theme}&style=1&locale=en&toolbar_bg=f1f3f6` +
+              `&enable_publishing=0&hide_top_toolbar=0&hide_side_toolbar=0&allow_symbol_change=0` +
+              `&save_image=0&studies=[]&hideideas=1`;
+  document.getElementById('chartIframe').src = url;
+}
+
+function closeChart() {
+  document.getElementById('chartModal').style.display = 'none';
+  document.getElementById('chartIframe').src = '';
 }
 
 // ══════════════════════════════════════════════════════════════════════════

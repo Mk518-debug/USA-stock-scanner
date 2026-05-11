@@ -179,6 +179,31 @@
             oninput="document.getElementById('scoreDisplay').textContent=this.value">
         </div>
 
+        <div class="sb-sec">
+          <div class="sb-sec-label">Price Range ($)</div>
+          <div class="price-range-row">
+            <input id="minPrice" class="range-inp" type="number" placeholder="Min" min="0" step="0.01">
+            <span class="range-sep">–</span>
+            <input id="maxPrice" class="range-inp" type="number" placeholder="Max" min="0" step="0.01">
+          </div>
+        </div>
+
+        <div class="sb-sec">
+          <div class="sb-sec-label">Min Volume &nbsp;<span id="volDisplay" class="score-display">Any</span></div>
+          <input id="minVolume" class="score-slider" type="range" min="0" max="5000000" step="100000" value="0"
+            oninput="updateVolLabel(this.value)">
+        </div>
+
+        <div class="sb-sec">
+          <div class="sb-sec-label">Market Cap</div>
+          <div class="seg-group" id="mktCapGroup">
+            <button class="seg-btn active" data-cap="all">All</button>
+            <button class="seg-btn" data-cap="small">Small</button>
+            <button class="seg-btn" data-cap="mid">Mid</button>
+            <button class="seg-btn" data-cap="large">Large</button>
+          </div>
+        </div>
+
 
         <div class="sb-sec">
           <div class="market-tabs">
@@ -210,6 +235,14 @@
           </div>
         </div>
 
+        <div class="sb-sec">
+          <div class="sb-sec-label sb-history-hdr" onclick="toggleHistory()">
+            History <span id="histCount" class="sl-count-badge"></span>
+            <span id="histArrow" style="float:right;opacity:.5">▾</span>
+          </div>
+          <div id="historyList" style="display:none"></div>
+        </div>
+
         <div id="customPanel" style="display:none">
           <div class="sb-sec">
             <div class="sb-sec-label">Enter Symbols (one per line)</div>
@@ -236,7 +269,33 @@
     <div class="spinner"></div>
     <div class="overlay-title" id="overlayTitle">Scanning US Markets…</div>
     <div class="overlay-sub" id="overlaySub">Fetching real-time data · works market open or closed</div>
-    <div class="overlay-note" id="overlayNote">⏱ ~3 sec via TradingView · ~60 sec via Yahoo Finance</div>
+    <div class="overlay-progress-wrap">
+      <div class="overlay-progress-track"><div class="overlay-progress-fill" id="overlayProgressFill"></div></div>
+      <div class="overlay-note" id="overlayNote">Initializing…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Chart Modal -->
+<div id="chartModal" class="chart-modal" style="display:none" onclick="if(event.target===this)closeChart()">
+  <div class="chart-modal-box">
+    <div class="chart-modal-hdr">
+      <div>
+        <span id="chartSym" class="chart-sym"></span>
+        <span id="chartName" class="chart-name"></span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="chartTfSel" class="ctrl-select sm-sel" onchange="reloadChart()">
+          <option value="D">1D</option>
+          <option value="240">4H</option>
+          <option value="60">1H</option>
+          <option value="15">15m</option>
+        </select>
+        <button onclick="closeChart()" class="chart-close">✕</button>
+      </div>
+    </div>
+    <iframe id="chartIframe" class="chart-iframe" src="" allowtransparency="true"
+            scrolling="no" frameborder="0" loading="lazy"></iframe>
   </div>
 </div>
 

@@ -117,7 +117,8 @@ def _signal_type_from_votes(up, down):
     return 'Mixed'
 
 
-def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200):
+def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
+            min_price=0, max_price=0, min_vol=0, market_cap='all'):
     sf  = _TF.get(timeframe, '')
     sf1 = '|60'  # always request 1H as secondary TF for HTF EMA
 
@@ -133,12 +134,29 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200):
         'sector', 'exchange', 'market_cap_basic',
     ]
 
+    # Base market cap floor (overridden by market_cap param)
+    base_mcap = 500_000_000
+    if market_cap == 'mid':   base_mcap = 2_000_000_000
+    elif market_cap == 'large': base_mcap = 10_000_000_000
+
     filters = [
         {'left': 'exchange',         'operation': 'in_range', 'right': ['NASDAQ', 'NYSE', 'AMEX']},
-        {'left': 'market_cap_basic', 'operation': 'greater',  'right': 500_000_000},
+        {'left': 'market_cap_basic', 'operation': 'greater',  'right': base_mcap},
         {'left': 'type',             'operation': 'equal',    'right': 'stock'},
         {'left': 'is_primary',       'operation': 'equal',    'right': True},
     ]
+
+    if market_cap == 'small':
+        filters.append({'left': 'market_cap_basic', 'operation': 'less', 'right': 2_000_000_000})
+    elif market_cap == 'mid':
+        filters.append({'left': 'market_cap_basic', 'operation': 'less', 'right': 10_000_000_000})
+
+    if min_price > 0:
+        filters.append({'left': 'close', 'operation': 'greater', 'right': float(min_price)})
+    if max_price > 0:
+        filters.append({'left': 'close', 'operation': 'less',    'right': float(max_price)})
+    if min_vol > 0:
+        filters.append({'left': 'volume', 'operation': 'greater', 'right': int(min_vol)})
 
     if sector and sector.lower() not in ('all', ''):
         tv_sector = _SECTOR_TV.get(sector, sector)
