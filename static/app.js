@@ -46,13 +46,18 @@ applyTheme(localStorage.getItem('theme') === 'light');
 
 // ── Clock ─────────────────────────────────────────────────────────────────
 function updateClock() {
-  const fmt = (o) => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', ...o }).format(new Date());
-  document.getElementById('nyTime').textContent =
-    `NY: ${fmt({weekday:'short',month:'short',day:'numeric'})}, ${fmt({hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})}`;
+  const fmtNY  = (o) => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', ...o }).format(new Date());
+  const fmtRUH = (o) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Riyadh',      ...o }).format(new Date());
 
-  const h   = parseInt(fmt({ hour:'numeric', hour12:false }));
-  const m   = parseInt(fmt({ minute:'numeric' }));
-  const day = fmt({ weekday:'short' });
+  document.getElementById('nyTime').textContent =
+    `NY: ${fmtNY({weekday:'short',month:'short',day:'numeric'})}, ${fmtNY({hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})}`;
+
+  document.getElementById('ruhTime').textContent =
+    `RUH: ${fmtRUH({weekday:'short',month:'short',day:'numeric'})}, ${fmtRUH({hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})}`;
+
+  const h   = parseInt(fmtNY({ hour:'numeric', hour12:false }));
+  const m   = parseInt(fmtNY({ minute:'numeric' }));
+  const day = fmtNY({ weekday:'short' });
   const el  = document.getElementById('marketStatus');
   const wk  = ['Sat','Sun'].includes(day);
   if      (!wk && ((h===9&&m>=30)||(h>9&&h<16))) { el.textContent='● MARKET OPEN'; el.className='market-badge open'; }

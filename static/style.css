@@ -97,6 +97,8 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 .brand-sub     { font-size: 0.68rem; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-top: 1px; }
 .header-right  { display: flex; align-items: center; gap: 12px; }
 .ny-time       { font-size: 0.8rem; color: var(--text2); font-variant-numeric: tabular-nums; }
+.ruh-time      { font-size: 0.8rem; color: var(--text2); font-variant-numeric: tabular-nums; }
+.time-sep      { color: var(--text3); font-size: 0.75rem; }
 
 .market-badge  { font-size: 0.7rem; font-weight: 700; letter-spacing: 1px; padding: 4px 10px; border-radius: 20px; }
 .market-badge.open   { color: var(--green);  background: rgba(0,230,118,.12); border: 1px solid rgba(0,230,118,.25); animation: pulse-g 2s infinite; }
