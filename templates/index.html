@@ -38,6 +38,7 @@
         <span class="time-sep">|</span>
         <span id="ruhTime" class="ruh-time" aria-label="Riyadh time">Loading…</span>
         <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light/dark mode">🌙</button>
+        <button class="sidebar-toggle" id="sidebarToggle" onclick="openSidebar()" aria-label="Open filters">⚙ Filters</button>
       </div>
     </header>
 
@@ -357,6 +358,9 @@
     <div id="alertContent"></div>
   </div>
 </div>
+
+<!-- Mobile sidebar backdrop -->
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
 
 <script src="/static/app.js"></script>
 </body>

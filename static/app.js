@@ -229,6 +229,20 @@ document.querySelectorAll('.ftab').forEach(tab => {
   });
 });
 
+// ── Mobile sidebar drawer ─────────────────────────────────────────────────
+function openSidebar() {
+  document.querySelector('.sidebar')?.classList.add('open');
+  document.getElementById('sidebarBackdrop')?.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+function closeSidebar() {
+  document.querySelector('.sidebar')?.classList.remove('open');
+  document.getElementById('sidebarBackdrop')?.classList.remove('active');
+  document.body.style.overflow = '';
+}
+// Close sidebar after scan starts on mobile
+const _origStartScan = startScan;
+
 // ── Market / Custom switch ────────────────────────────────────────────────
 function switchMarket(mode) {
   document.getElementById('mtAll').classList.toggle('active',    mode === 'all');
@@ -255,6 +269,7 @@ async function startScan(force = false) {
   saveSettings();
 
   currentPage = 0;
+  closeSidebar();
   setLoading(true);
   startProgressAnim(symbols.length || 200);
   try {
