@@ -270,7 +270,7 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 /* ── Current price row ── */
 .sk-price-row   { padding: 8px 14px; display: flex; align-items: center; gap: 8px; background: var(--bg3); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .cp-label       { font-size: 0.72rem; color: var(--text3); flex-shrink: 0; }
-.cp-val         { font-size: 1.2rem; font-weight: 900; color: #fff; letter-spacing: 0.3px; }
+.cp-val         { font-size: 1.2rem; font-weight: 900; color: var(--text); letter-spacing: 0.3px; }
 .cp-change      { font-size: 0.8rem; font-weight: 700; }
 .cp-change.bull { color: var(--green); }
 .cp-change.bear { color: var(--red); }
