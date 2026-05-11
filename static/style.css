@@ -598,6 +598,70 @@ body.light .news-item { box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .range-inp:focus { border-color: var(--blue); }
 .range-inp::placeholder { color: var(--text3); }
 .range-sep      { color: var(--text3); font-size: 0.85rem; flex-shrink: 0; }
+.range-row-two  { display: flex; flex-direction: column; gap: 4px; }
+
+/* ════════════════════════════════════════════════════════
+   Export dropdown
+════════════════════════════════════════════════════════ */
+.export-wrap    { position: relative; }
+.export-btn     { white-space: nowrap; }
+.export-menu    { position: absolute; top: calc(100% + 4px); right: 0; background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r-sm); z-index: 300; overflow: hidden; min-width: 130px; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+.export-menu button { display: block; width: 100%; background: transparent; border: none; color: var(--text2); padding: 8px 14px; text-align: left; font-size: 0.8rem; cursor: pointer; transition: background .1s; }
+.export-menu button:hover { background: var(--bg3); color: var(--text); }
+
+/* ════════════════════════════════════════════════════════
+   Load more button
+════════════════════════════════════════════════════════ */
+.load-more-wrap { text-align: center; padding: 16px; }
+.load-more-btn  { background: var(--bg3); border: 1px solid var(--border2); color: var(--text2); padding: 10px 28px; border-radius: 20px; cursor: pointer; font-size: 0.82rem; font-weight: 600; transition: all .15s; }
+.load-more-btn:hover { border-color: var(--blue); color: var(--blue); }
+
+/* ════════════════════════════════════════════════════════
+   Support / Resistance row on card
+════════════════════════════════════════════════════════ */
+.sk-sr-row      { display: flex; gap: 10px; padding: 5px 14px; border-top: 1px solid var(--border); }
+.sr-item        { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+.sr-item.support    { color: var(--green); background: rgba(0,230,118,.08); border: 1px solid rgba(0,230,118,.2); }
+.sr-item.resistance { color: var(--red);   background: rgba(255,23,68,.06);  border: 1px solid rgba(255,23,68,.18); }
+
+/* ════════════════════════════════════════════════════════
+   Compare floating bar
+════════════════════════════════════════════════════════ */
+.compare-bar    { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--bg2); border: 1px solid var(--border2); border-radius: 40px; padding: 10px 18px; gap: 12px; align-items: center; z-index: 500; box-shadow: 0 8px 32px rgba(0,0,0,.5); white-space: nowrap; }
+.cmp-text       { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+.cmp-go-btn     { background: var(--blue); border: none; color: #fff; padding: 6px 16px; border-radius: 20px; cursor: pointer; font-size: 0.8rem; font-weight: 700; transition: opacity .15s; }
+.cmp-go-btn:disabled { opacity: .4; cursor: not-allowed; }
+.cmp-go-btn:not(:disabled):hover { opacity: .85; }
+.cmp-clear-btn  { background: transparent; border: 1px solid var(--border2); color: var(--text2); padding: 6px 12px; border-radius: 20px; cursor: pointer; font-size: 0.78rem; transition: all .15s; }
+.cmp-clear-btn:hover { border-color: var(--red); color: var(--red); }
+
+/* ════════════════════════════════════════════════════════
+   Compare & Alerts modal
+════════════════════════════════════════════════════════ */
+.cmp-modal      { position: fixed; inset: 0; background: rgba(7,7,15,.88); backdrop-filter: blur(6px); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.cmp-modal-box  { background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r); padding: 24px; width: 100%; max-width: 680px; position: relative; max-height: 88vh; overflow-y: auto; }
+.cmp-title      { font-size: 1.1rem; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+.cmp-sub        { font-size: 0.75rem; color: var(--text3); margin-bottom: 16px; }
+.cmp-table      { width: 100%; border-collapse: collapse; }
+.cmp-table thead th { font-size: 0.78rem; color: var(--text2); padding: 6px 12px 10px; text-align: center; border-bottom: 1px solid var(--border2); }
+.cmp-table thead th:first-child { text-align: left; }
+.cmp-metric     { font-size: 0.78rem; color: var(--text3); padding: 9px 0; border-bottom: 1px solid var(--border); }
+.cmp-val        { font-size: 0.88rem; font-weight: 700; text-align: center; padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text2); }
+.cmp-val.cmp-win  { color: var(--green); }
+.cmp-val.cmp-lose { color: var(--red); }
+
+/* ── Alerts ── */
+.alert-form     { margin-bottom: 14px; }
+.alert-row      { display: flex; gap: 8px; align-items: center; }
+.alert-existing { margin-top: 14px; }
+.alert-item     { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; background: var(--bg3); border-radius: var(--r-sm); margin-bottom: 5px; font-size: 0.8rem; color: var(--text2); }
+
+/* ════════════════════════════════════════════════════════
+   News sentiment badges
+════════════════════════════════════════════════════════ */
+.sent-badge     { font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; white-space: nowrap; }
+.sent-badge.pos { background: rgba(0,230,118,.1); color: var(--green); border: 1px solid rgba(0,230,118,.25); }
+.sent-badge.neg { background: rgba(255,23,68,.08); color: var(--red);   border: 1px solid rgba(255,23,68,.2); }
 
 /* ════════════════════════════════════════════════════════
    Sidebar: Scan history

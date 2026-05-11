@@ -4,6 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>USA Stock Scanner</title>
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+  <!-- SEO / OG -->
+  <meta name="description" content="Real-time USA stock scanner with technical analysis — EMA, MACD, RSI, SuperTrend, Volume signals.">
+  <meta property="og:title" content="USA Stock Scanner">
+  <meta property="og:description" content="Scan US markets with real-time technical analysis.">
+  <meta property="og:type" content="website">
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -24,18 +33,18 @@
       </div>
 
       <div class="header-right">
-        <span id="marketStatus" class="market-badge closed">● CLOSED</span>
-        <span id="nyTime" class="ny-time">Loading…</span>
+        <span id="marketStatus" class="market-badge closed" aria-live="polite">● CLOSED</span>
+        <span id="nyTime"  class="ny-time" aria-label="New York time">Loading…</span>
         <span class="time-sep">|</span>
-        <span id="ruhTime" class="ruh-time">Loading…</span>
-        <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark mode">🌙</button>
+        <span id="ruhTime" class="ruh-time" aria-label="Riyadh time">Loading…</span>
+        <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light/dark mode">🌙</button>
       </div>
     </header>
 
     <!-- ══ SCANNER PANEL ══ -->
     <div id="scannerPanel">
 
-      <!-- Sticky wrapper: stats + filter stay visible while scrolling -->
+      <!-- Sticky wrapper -->
       <div class="sticky-bars" id="scannerStickyBars">
 
       <!-- Stats Top Bar -->
@@ -70,27 +79,37 @@
       </div>
 
       <!-- Filter / Tab Bar -->
-      <div class="filter-bar" id="filterBar" style="display:none">
+      <div class="filter-bar" id="filterBar" style="display:none" role="tablist">
         <div class="ftabs">
-          <button class="ftab active" data-tab="all">All</button>
-          <button class="ftab" data-tab="bullish">▲ Bullish</button>
-          <button class="ftab" data-tab="bearish">▼ Bearish</button>
-          <button class="ftab" data-tab="s80">🔥 80+</button>
-          <button class="ftab" data-tab="strong">⚡ Strong Buy</button>
-          <button class="ftab" data-tab="open">📌 Watching</button>
-        <button class="ftab ftab-news" data-tab="news">📰 News</button>
+          <button class="ftab active" data-tab="all"     role="tab" aria-selected="true">All</button>
+          <button class="ftab" data-tab="bullish"        role="tab" aria-selected="false">▲ Bullish</button>
+          <button class="ftab" data-tab="bearish"        role="tab" aria-selected="false">▼ Bearish</button>
+          <button class="ftab" data-tab="s80"            role="tab" aria-selected="false">🔥 80+</button>
+          <button class="ftab" data-tab="strong"         role="tab" aria-selected="false">⚡ Strong Buy</button>
+          <button class="ftab" data-tab="open"           role="tab" aria-selected="false">📌 Watching</button>
+          <button class="ftab ftab-news" data-tab="news" role="tab" aria-selected="false">📰 News</button>
         </div>
         <div class="filter-right">
-          <input id="cardSearch" class="card-search" type="text" placeholder="🔍 Search stocks…" oninput="onSearch(this.value)">
-          <select id="sortSel" class="ctrl-select sm-sel" onchange="render()">
+          <input id="cardSearch" class="card-search" type="text" placeholder="🔍 Search stocks…"
+                 aria-label="Search stocks" oninput="onSearch(this.value)">
+          <select id="sortSel" class="ctrl-select sm-sel" aria-label="Sort results" onchange="render()">
             <option value="score">Score ↓</option>
             <option value="change_pct">Change %</option>
             <option value="rsi">RSI</option>
             <option value="vol_ratio">Volume</option>
             <option value="price">Price</option>
+            <option value="atr">ATR</option>
+            <option value="rs_20">RS vs SPY</option>
+            <option value="adx">ADX</option>
           </select>
-          <button class="close-all-btn" onclick="closeAllWatched()">✕ Close All</button>
-          <button class="refresh-btn" onclick="exportCSV()" title="Export to CSV">⬇ CSV</button>
+          <div class="export-wrap">
+            <button class="refresh-btn export-btn" onclick="toggleExportMenu()" aria-label="Export data">⬇ Export ▾</button>
+            <div class="export-menu" id="exportMenu" style="display:none">
+              <button onclick="exportCSV();toggleExportMenu()">CSV</button>
+              <button onclick="exportExcel();toggleExportMenu()">Excel (.xlsx)</button>
+            </div>
+          </div>
+          <button class="close-all-btn" onclick="closeAllWatched()" aria-label="Close all watched stocks">✕ Close All</button>
         </div>
       </div>
 
@@ -108,21 +127,19 @@
           <div class="welcome-note">📅 Works 24/7 — uses latest available data even when markets are closed</div>
           <div class="feature-row">
             <span class="feat">📡 TradingView Data</span>
-            <span class="feat">📊 EMA Trend</span>
+            <span class="feat">📊 EMA + SuperTrend</span>
             <span class="feat">⚡ MACD Signal</span>
-            <span class="feat">📈 RSI Momentum</span>
+            <span class="feat">📈 RSI + Stochastic</span>
             <span class="feat">💹 Volume Spike</span>
-            <span class="feat">🎯 Entry &amp; Targets</span>
+            <span class="feat">🎯 AB.SK Targets</span>
           </div>
         </div>
       </div>
 
     </div><!-- end #scannerPanel -->
 
-    <!-- ══ RESEARCH PANEL ══ -->
-    <!-- News area (shown when News tab is active) -->
+    <!-- News area -->
     <div id="newsArea" style="display:none; padding:16px">
-      <!-- News filter chips -->
       <div class="news-bar" id="newsBar">
         <div class="news-chips" id="newsChips">
           <button class="n-chip active" data-ncat="all">All</button>
@@ -140,10 +157,8 @@
           <button class="refresh-btn" onclick="fetchNews(true)">↺ Refresh</button>
         </div>
       </div>
-      <!-- News feed -->
       <div id="newsFeed"></div>
     </div>
-
 
   </div><!-- end .main-content -->
 
@@ -151,47 +166,62 @@
   <div class="sidebar">
     <div class="sidebar-body">
 
-      <!-- ── Scanner sidebar content ── -->
       <div id="scannerSide">
 
         <div class="sb-sec">
           <div class="sb-sec-label">Scan Type</div>
           <div class="seg-group" id="scanTypeGroup">
-            <button class="seg-btn active" data-type="comprehensive">Comprehensive</button>
+            <button class="seg-btn active" data-type="comprehensive">All</button>
             <button class="seg-btn" data-type="trend">Trend</button>
             <button class="seg-btn" data-type="reversal">Reversal</button>
+            <button class="seg-btn" data-type="momentum">Momentum</button>
+            <button class="seg-btn" data-type="breakout">Breakout</button>
+            <button class="seg-btn" data-type="oversold">Oversold</button>
           </div>
         </div>
 
         <div class="sb-sec">
           <div class="sb-sec-label">Timeframe</div>
           <div class="seg-group" id="tfGroup">
-            <button class="seg-btn active" data-tf="1d">1D</button>
-            <button class="seg-btn" data-tf="4h">4H</button>
-            <button class="seg-btn" data-tf="1h">1H</button>
             <button class="seg-btn" data-tf="15m">15m</button>
+            <button class="seg-btn" data-tf="1h">1H</button>
+            <button class="seg-btn" data-tf="4h">4H</button>
+            <button class="seg-btn active" data-tf="1d">1D</button>
+            <button class="seg-btn" data-tf="1w">1W</button>
+            <button class="seg-btn" data-tf="1mo">1M</button>
           </div>
         </div>
 
         <div class="sb-sec">
           <div class="sb-sec-label">Min Score &nbsp;<span id="scoreDisplay" class="score-display">50</span></div>
           <input id="minScore" class="score-slider" type="range" min="0" max="100" value="50"
+            aria-label="Minimum score filter"
             oninput="document.getElementById('scoreDisplay').textContent=this.value">
+        </div>
+
+        <div class="sb-sec">
+          <div class="sb-sec-label">RSI Range &nbsp;<span id="rsiDisplay" class="score-display">0–100</span></div>
+          <div class="range-row-two">
+            <input id="rsiMin" class="score-slider" type="range" min="0" max="100" value="0"
+              aria-label="RSI minimum" oninput="updateRsiLabel()">
+            <input id="rsiMax" class="score-slider" type="range" min="0" max="100" value="100"
+              aria-label="RSI maximum" oninput="updateRsiLabel()">
+          </div>
         </div>
 
         <div class="sb-sec">
           <div class="sb-sec-label">Price Range ($)</div>
           <div class="price-range-row">
-            <input id="minPrice" class="range-inp" type="number" placeholder="Min" min="0" step="0.01">
+            <input id="minPrice" class="range-inp" type="number" placeholder="Min" min="0" step="0.01" aria-label="Minimum price">
             <span class="range-sep">–</span>
-            <input id="maxPrice" class="range-inp" type="number" placeholder="Max" min="0" step="0.01">
+            <input id="maxPrice" class="range-inp" type="number" placeholder="Max" min="0" step="0.01" aria-label="Maximum price">
           </div>
         </div>
 
         <div class="sb-sec">
           <div class="sb-sec-label">Min Volume &nbsp;<span id="volDisplay" class="score-display">Any</span></div>
           <input id="minVolume" class="score-slider" type="range" min="0" max="5000000" step="100000" value="0"
-            oninput="updateVolLabel(this.value)">
+            aria-label="Minimum volume filter" oninput="updateVolLabel(this.value)">
         </div>
 
         <div class="sb-sec">
@@ -204,7 +234,6 @@
           </div>
         </div>
 
-
         <div class="sb-sec">
           <div class="market-tabs">
             <button class="mtab active" id="mtAll" onclick="switchMarket('all')">All Market</button>
@@ -215,7 +244,7 @@
         <div id="allPanel">
           <div class="sb-sec">
             <div class="sb-sec-label">Sector Filter</div>
-            <select id="sectorSel" class="ctrl-select full-w">
+            <select id="sectorSel" class="ctrl-select full-w" aria-label="Sector filter">
               <option value="all">All Sectors</option>
               <option value="Technology">Technology</option>
               <option value="Finance">Finance</option>
@@ -235,19 +264,20 @@
           </div>
         </div>
 
+        <div id="customPanel" style="display:none">
+          <div class="sb-sec">
+            <div class="sb-sec-label">Enter Symbols (one per line)</div>
+            <textarea id="symInput" class="sym-ta" aria-label="Custom stock symbols" placeholder="AAPL&#10;MSFT&#10;NVDA&#10;TSLA&#10;AMZN"></textarea>
+          </div>
+        </div>
+
+        <!-- Scan History -->
         <div class="sb-sec">
-          <div class="sb-sec-label sb-history-hdr" onclick="toggleHistory()">
+          <div class="sb-sec-label sb-history-hdr" onclick="toggleHistory()" style="cursor:pointer">
             History <span id="histCount" class="sl-count-badge"></span>
             <span id="histArrow" style="float:right;opacity:.5">▾</span>
           </div>
           <div id="historyList" style="display:none"></div>
-        </div>
-
-        <div id="customPanel" style="display:none">
-          <div class="sb-sec">
-            <div class="sb-sec-label">Enter Symbols (one per line)</div>
-            <textarea id="symInput" class="sym-ta" placeholder="AAPL&#10;MSFT&#10;NVDA&#10;TSLA&#10;AMZN"></textarea>
-          </div>
         </div>
 
       </div><!-- end #scannerSide -->
@@ -255,7 +285,7 @@
     </div><!-- end .sidebar-body -->
 
     <div class="sidebar-foot">
-      <button id="scanBtn" class="scan-btn-main" onclick="startScan()">
+      <button id="scanBtn" class="scan-btn-main" onclick="startScan()" aria-label="Start stock scan">
         <span id="scanBtnText">🔍 START SCAN</span>
       </button>
     </div>
@@ -264,7 +294,7 @@
 </div><!-- end .app-layout -->
 
 <!-- Loading Overlay -->
-<div id="loadingOverlay" class="overlay" style="display:none">
+<div id="loadingOverlay" class="overlay" style="display:none" role="status" aria-live="polite">
   <div class="overlay-box">
     <div class="spinner"></div>
     <div class="overlay-title" id="overlayTitle">Scanning US Markets…</div>
@@ -277,7 +307,8 @@
 </div>
 
 <!-- Chart Modal -->
-<div id="chartModal" class="chart-modal" style="display:none" onclick="if(event.target===this)closeChart()">
+<div id="chartModal" class="chart-modal" style="display:none" role="dialog" aria-label="Stock chart"
+     onclick="if(event.target===this)closeChart()">
   <div class="chart-modal-box">
     <div class="chart-modal-hdr">
       <div>
@@ -285,17 +316,45 @@
         <span id="chartName" class="chart-name"></span>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <select id="chartTfSel" class="ctrl-select sm-sel" onchange="reloadChart()">
+        <select id="chartTfSel" class="ctrl-select sm-sel" onchange="reloadChart()" aria-label="Chart timeframe">
           <option value="D">1D</option>
           <option value="240">4H</option>
           <option value="60">1H</option>
           <option value="15">15m</option>
+          <option value="W">1W</option>
+          <option value="M">1M</option>
         </select>
-        <button onclick="closeChart()" class="chart-close">✕</button>
+        <button onclick="closeChart()" class="chart-close" aria-label="Close chart">✕</button>
       </div>
     </div>
     <iframe id="chartIframe" class="chart-iframe" src="" allowtransparency="true"
-            scrolling="no" frameborder="0" loading="lazy"></iframe>
+            scrolling="no" frameborder="0" loading="lazy" title="TradingView chart"></iframe>
+  </div>
+</div>
+
+<!-- Compare floating bar -->
+<div id="compareBar" class="compare-bar" style="display:none" role="status">
+  <span id="compareBarText" class="cmp-text"></span>
+  <button id="compareBtn" class="cmp-go-btn" onclick="openCompareModal()" disabled>Compare →</button>
+  <button class="cmp-clear-btn" onclick="clearCompare()" aria-label="Clear compare">✕ Clear</button>
+</div>
+
+<!-- Compare modal -->
+<div id="compareModal" class="cmp-modal" style="display:none" role="dialog" aria-label="Compare stocks"
+     onclick="if(event.target===this)document.getElementById('compareModal').style.display='none'">
+  <div class="cmp-modal-box">
+    <button class="chart-close" onclick="document.getElementById('compareModal').style.display='none'"
+            aria-label="Close compare" style="position:absolute;top:14px;right:14px">✕</button>
+    <div id="compareContent"></div>
+  </div>
+</div>
+
+<!-- Alerts modal -->
+<div id="alertModal" class="cmp-modal" style="display:none" role="dialog" aria-label="Set price alert"
+     onclick="if(event.target===this)closeAlertModal()">
+  <div class="cmp-modal-box" style="max-width:400px">
+    <button class="chart-close" onclick="closeAlertModal()" aria-label="Close" style="position:absolute;top:14px;right:14px">✕</button>
+    <div id="alertContent"></div>
   </div>
 </div>
 

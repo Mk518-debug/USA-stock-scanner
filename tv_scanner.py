@@ -13,7 +13,7 @@ _HEADERS = {
     'content-type': 'application/json',
 }
 
-_TF = {'1d': '', '4h': '|240', '1h': '|60', '15m': '|15'}
+_TF = {'1d': '', '4h': '|240', '1h': '|60', '15m': '|15', '1w': '|W', '1mo': '|M'}
 
 _SECTOR_MAP = {
     'Technology':             'Technology',
@@ -300,6 +300,8 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
             'divergence':    None,
             'patterns':      patterns,
             'rs_20':         None,
+            'support':       round(bb_lower, 4) if bb_lower else round(price * 0.95, 4),
+            'resistance':    round(bb_upper, 4) if bb_upper else round(price * 1.05, 4),
             'last_candle':   'Real-time',
             'source':        'TradingView',
             'ema_score':     75 if (price and e20 and e50 and price > e20 > e50) else 25,

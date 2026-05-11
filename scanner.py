@@ -240,6 +240,8 @@ _INTERVAL_PARAMS = {
     '4h':  {'period': '60d', 'interval': '1h'},
     '1h':  {'period': '60d', 'interval': '1h'},
     '15m': {'period': '30d', 'interval': '15m'},
+    '1w':  {'period': '5y',  'interval': '1wk'},
+    '1mo': {'period': '10y', 'interval': '1mo'},
 }
 
 
@@ -571,6 +573,14 @@ def analyze(symbol, timeframe='1d'):
         if rs_20 >= 5:          patterns.append('RS+ vs SPY')
         if rs_20 <= -5:         patterns.append('RS- vs SPY')
 
+        # ── Support & Resistance (20-bar pivot) ──────────────────────────────
+        if len(high) >= 21:
+            resistance = round(float(high.iloc[-21:-1].max()), 4)
+            support    = round(float(low.iloc[-21:-1].min()),  4)
+        else:
+            resistance = round(c * 1.05, 4)
+            support    = round(c * 0.95, 4)
+
         # ── AB.SK trade levels ────────────────────────────────────────────────
         mult_dir = 1 if direction == 'Bullish' else -1
         entry    = round(c, 4)
@@ -630,6 +640,8 @@ def analyze(symbol, timeframe='1d'):
             'divergence':    div,
             'patterns':      patterns,
             'rs_20':         rs_20,
+            'support':       support,
+            'resistance':    resistance,
             'last_candle':   last_candle,
         }
     except Exception as e:

@@ -24,17 +24,21 @@ window.addEventListener('load',   fitScrollZones);
 window.addEventListener('resize', fitScrollZones);
 
 // ── State ─────────────────────────────────────────────────────────────────
-let allResults  = [];
-let activeTab   = 'all';
-let scanType    = 'comprehensive';
-let lastTF      = '1d';
-let searchQuery = '';
-let watchedSet  = new Set();
-let dismissSet  = new Set();
-let marketCap   = 'all';
+let allResults   = [];
+let activeTab    = 'all';
+let scanType     = 'comprehensive';
+let lastTF       = '1d';
+let searchQuery  = '';
+let watchedSet   = new Set();
+let dismissSet   = new Set();
+let marketCap    = 'all';
+let compareList  = [];
 let _chartSymbol = '';
 let _chartTvSym  = '';
 let scanHistory  = [];
+let currentPage  = 0;
+const PAGE_SIZE  = 50;
+let rsiMin = 0, rsiMax = 100;
 
 // ── localStorage: persist watchlist + settings ───────────────────────────
 function saveWatchlist() {
@@ -193,16 +197,26 @@ function wireSegs(groupId, onSelect) {
     });
   });
 }
-wireSegs('scanTypeGroup', btn => { scanType = btn.dataset.type; render(); });
-wireSegs('tfGroup',       btn => { lastTF   = btn.dataset.tf; });
+wireSegs('scanTypeGroup', btn => { scanType  = btn.dataset.type; currentPage = 0; render(); });
+wireSegs('tfGroup',       btn => { lastTF    = btn.dataset.tf; });
 wireSegs('mktCapGroup',   btn => { marketCap = btn.dataset.cap; });
+
+function updateRsiLabel() {
+  rsiMin = parseInt(document.getElementById('rsiMin')?.value || 0);
+  rsiMax = parseInt(document.getElementById('rsiMax')?.value || 100);
+  if (rsiMin > rsiMax) { rsiMin = rsiMax; document.getElementById('rsiMin').value = rsiMin; }
+  const el = document.getElementById('rsiDisplay');
+  if (el) el.textContent = (rsiMin === 0 && rsiMax === 100) ? '0–100' : `${rsiMin}–${rsiMax}`;
+  currentPage = 0; render();
+}
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 document.querySelectorAll('.ftab').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
+    document.querySelectorAll('.ftab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+    tab.classList.add('active'); tab.setAttribute('aria-selected','true');
     activeTab = tab.dataset.tab;
+    currentPage = 0;
     if (activeTab === 'news') {
       document.getElementById('cardsArea').style.display = 'none';
       document.getElementById('newsArea').style.display  = '';
@@ -224,7 +238,7 @@ function switchMarket(mode) {
 }
 
 // ── Search ────────────────────────────────────────────────────────────────
-function onSearch(v) { searchQuery = v.trim().toLowerCase(); render(); }
+function onSearch(v) { searchQuery = v.trim().toLowerCase(); currentPage = 0; render(); }
 
 // ── Scan ──────────────────────────────────────────────────────────────────
 async function startScan(force = false) {
@@ -240,6 +254,7 @@ async function startScan(force = false) {
   lastTF = timeframe;
   saveSettings();
 
+  currentPage = 0;
   setLoading(true);
   startProgressAnim(symbols.length || 200);
   try {
@@ -247,7 +262,8 @@ async function startScan(force = false) {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ timeframe, min_score: minScore, sector, symbols, force,
                              min_price: minPrice, max_price: maxPrice,
-                             min_volume: minVol, market_cap: marketCap }),
+                             min_volume: minVol, market_cap: marketCap,
+                             rsi_min: rsiMin, rsi_max: rsiMax }),
     });
     const text = await res.text();
     let data;
@@ -258,6 +274,7 @@ async function startScan(force = false) {
     updateStats(data);
     populateStockList(data.results);
     saveScanToHistory(data);
+    checkAlerts(data.results);
 
     document.getElementById('statsTop').style.display  = 'grid';
     document.getElementById('filterBar').style.display = 'flex';
@@ -445,23 +462,37 @@ function getFiltered() {
     case 'open':    list = list.filter(r => watchedSet.has(r.symbol)); break;
   }
   switch (scanType) {
-    case 'trend':    list = list.filter(r => r.ema_score>=70); break;
-    case 'reversal': list = list.filter(r => r.rsi<38||r.rsi>62); break;
+    case 'trend':      list = list.filter(r => r.signal_type==='Trend' || r.ema_score>=70); break;
+    case 'reversal':   list = list.filter(r => r.signal_type==='Reversal' || r.rsi<38||r.rsi>68); break;
+    case 'momentum':   list = list.filter(r => (r.vol_ratio||0)>=1.5 && (r.rsi||0)>=55); break;
+    case 'breakout':   list = list.filter(r => (r.patterns||[]).includes('20D Breakout') || r.score>=75); break;
+    case 'oversold':   list = list.filter(r => (r.rsi||100)<=35 || (r.patterns||[]).some(p=>p.toLowerCase().includes('oversold'))); break;
   }
-  if (searchQuery) list = list.filter(r => r.symbol.toLowerCase().includes(searchQuery) || (r.name||'').toLowerCase().includes(searchQuery));
+  // RSI range filter
+  if (rsiMin > 0 || rsiMax < 100) {
+    list = list.filter(r => (r.rsi||0) >= rsiMin && (r.rsi||0) <= rsiMax);
+  }
+  if (searchQuery) list = list.filter(r =>
+    r.symbol.toLowerCase().includes(searchQuery) || (r.name||'').toLowerCase().includes(searchQuery));
   return list;
 }
 
 function render() {
   const wrap = document.getElementById('cardsArea');
-  const key  = document.getElementById('sortSel').value;
+  const key  = document.getElementById('sortSel')?.value || 'score';
   const list = [...getFiltered()].sort((a,b) => (b[key]||0) - (a[key]||0));
 
   if (!list.length) { wrap.innerHTML = '<div class="empty-msg">🔍 No results match your filters.</div>'; return; }
 
-  // Watched cards float to top
-  const ordered = [...list.filter(r=>watchedSet.has(r.symbol)), ...list.filter(r=>!watchedSet.has(r.symbol))];
-  wrap.innerHTML = `<div class="cards-grid">${ordered.map(buildCard).join('')}</div>`;
+  const ordered  = [...list.filter(r=>watchedSet.has(r.symbol)), ...list.filter(r=>!watchedSet.has(r.symbol))];
+  const visible  = ordered.slice(0, (currentPage + 1) * PAGE_SIZE);
+  const hasMore  = visible.length < ordered.length;
+
+  wrap.innerHTML = `<div class="cards-grid">${visible.map(buildCard).join('')}</div>` +
+    (hasMore ? `<div class="load-more-wrap">
+      <button class="load-more-btn" onclick="currentPage++;render()">
+        Load more (${ordered.length - visible.length} remaining)
+      </button></div>` : '');
 }
 
 // ── Pattern Tags ──────────────────────────────────────────────────────────
@@ -493,6 +524,39 @@ function getPatterns(r) {
     t.push({ label:'High Confidence', cls:'purple' });
 
   return t;
+}
+
+// ── Export helpers ────────────────────────────────────────────────────────
+function toggleExportMenu() {
+  const m = document.getElementById('exportMenu');
+  if (m) m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.export-wrap')) {
+    const m = document.getElementById('exportMenu');
+    if (m) m.style.display = 'none';
+  }
+});
+
+function exportExcel() {
+  const rows = [...getFiltered()];
+  if (!rows.length) { alert('No results to export.'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excel library not loaded. Use CSV instead.'); return; }
+  const data = rows.map(r => ({
+    Symbol: r.symbol, Name: r.name||'', Score: r.score, Direction: r.direction,
+    'Signal Type': r.signal_type||'', 'Up Votes': r.up_votes||0, 'Down Votes': r.down_votes||0,
+    'TV Rating': r.tv_rating||'', Price: r.price, 'Change%': r.change_pct||0,
+    RSI: r.rsi, ADX: r.adx||0, 'Vol Ratio': r.vol_ratio,
+    ATR: r.atr, Entry: r.entry, Stop: r.stop||'',
+    'Goal 1': r.tp1||'', 'Goal 2': r.tp2||'', 'Goal 3': r.tp3||'',
+    Support: r.support||'', Resistance: r.resistance||'',
+    Sector: r.sector||'', Patterns: (r.patterns||[]).join(';'),
+    'Data As Of': r.last_candle||''
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Scan Results');
+  XLSX.writeFile(wb, `usa_scan_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 // ── CSV Export ────────────────────────────────────────────────────────────
@@ -693,12 +757,24 @@ function buildCard(r) {
     <div class="sk-agree">Agree: ${r.last_candle||'—'} (${upV} indicators) ↺</div>
   </div>
 
+  <!-- ─── Support / Resistance ─── -->
+  ${(r.support||r.resistance) ? `
+  <div class="sk-sr-row">
+    <span class="sr-item support">▲ S: $${parseFloat(r.support||0).toFixed(2)}</span>
+    <span class="sr-item resistance">▼ R: $${parseFloat(r.resistance||0).toFixed(2)}</span>
+  </div>` : ''}
+
   <!-- ─── Footer ─── -->
   <div class="card-footer">
-    <button class="cf-btn danger" onclick="dismissCard('${r.symbol}')" title="Dismiss">✕</button>
+    <button class="cf-btn danger" onclick="dismissCard('${r.symbol}')" title="Dismiss" aria-label="Dismiss ${r.symbol}">✕</button>
     <button class="cf-btn chart-btn" onclick="openChart('${r.symbol}','${r.tv_symbol||r.symbol}','${(r.name||'').replace(/'/g,'')}')">📊 Chart</button>
     <button class="cf-btn${isW?' watch-active':''}" onclick="toggleWatch('${r.symbol}')">
-      ${isW?'📌 Watching':'👁 Watch'}
+      ${isW?'📌':'👁'} Watch
+    </button>
+    <button class="cf-btn" onclick="openAlertModal('${r.symbol}')" title="Set alert" aria-label="Set alert for ${r.symbol}">🔔</button>
+    <button class="cf-btn${compareList.some(s=>s.symbol===r.symbol)?' watch-active':''}"
+            onclick="toggleCompare('${r.symbol}')" title="Compare" aria-label="Compare ${r.symbol}">
+      ${compareList.some(s=>s.symbol===r.symbol)?'✓ Cmp':'⊕ Cmp'}
     </button>
     <span class="sk-votes">${dnV}↓ | ${upV}↑</span>
   </div>
@@ -820,6 +896,153 @@ function closeChart() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+//  COMPARE MODE
+// ══════════════════════════════════════════════════════════════════════════
+function toggleCompare(symbol) {
+  const r = allResults.find(x => x.symbol === symbol);
+  if (!r) return;
+  const idx = compareList.findIndex(s => s.symbol === symbol);
+  if (idx > -1) {
+    compareList.splice(idx, 1);
+  } else {
+    if (compareList.length >= 2) { alert('Already comparing 2 stocks. Remove one first.'); return; }
+    compareList.push(r);
+  }
+  updateCompareBar();
+  render();
+}
+
+function updateCompareBar() {
+  const bar = document.getElementById('compareBar');
+  const txt = document.getElementById('compareBarText');
+  const btn = document.getElementById('compareBtn');
+  if (!bar) return;
+  bar.style.display = compareList.length > 0 ? 'flex' : 'none';
+  if (txt) txt.textContent = compareList.map(s => s.symbol).join(' vs ');
+  if (btn) btn.disabled = compareList.length < 2;
+}
+
+function clearCompare() {
+  compareList = [];
+  updateCompareBar();
+  render();
+}
+
+function openCompareModal() {
+  if (compareList.length < 2) return;
+  const [a, b] = compareList;
+  const metrics = [
+    { label:'Score',         va:a.score,       vb:b.score,       higher:true,  fmt:v=>v },
+    { label:'Price',         va:a.price,       vb:b.price,       higher:null,  fmt:v=>'$'+parseFloat(v).toFixed(2) },
+    { label:'Change %',      va:a.change_pct,  vb:b.change_pct,  higher:true,  fmt:v=>v+'%' },
+    { label:'RSI',           va:a.rsi,         vb:b.rsi,         higher:false, fmt:v=>v },
+    { label:'ADX',           va:a.adx||0,      vb:b.adx||0,      higher:true,  fmt:v=>v },
+    { label:'Vol Ratio',     va:a.vol_ratio,   vb:b.vol_ratio,   higher:true,  fmt:v=>v+'x' },
+    { label:'Up Votes',      va:a.up_votes||0, vb:b.up_votes||0, higher:true,  fmt:v=>v },
+    { label:'Signal Type',   va:a.signal_type, vb:b.signal_type, higher:null,  fmt:v=>v||'—' },
+    { label:'Support',       va:a.support||0,  vb:b.support||0,  higher:null,  fmt:v=>v?'$'+parseFloat(v).toFixed(2):'—' },
+    { label:'Resistance',    va:a.resistance||0,vb:b.resistance||0,higher:null,fmt:v=>v?'$'+parseFloat(v).toFixed(2):'—' },
+    { label:'ATR',           va:a.atr||0,      vb:b.atr||0,      higher:null,  fmt:v=>v },
+  ];
+  const rows = metrics.map(m => {
+    const aWins = m.higher===true?(m.va>m.vb):m.higher===false?(m.va<m.vb):null;
+    const aC = aWins===true?'cmp-win':aWins===false?'cmp-lose':'';
+    const bC = aWins===false?'cmp-win':aWins===true?'cmp-lose':'';
+    return `<tr>
+      <td class="cmp-metric">${m.label}</td>
+      <td class="cmp-val ${aC}">${m.fmt(m.va)}</td>
+      <td class="cmp-val ${bC}">${m.fmt(m.vb)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('compareContent').innerHTML = `
+    <h3 class="cmp-title">${a.symbol} <span style="opacity:.4">vs</span> ${b.symbol}</h3>
+    <div class="cmp-sub">${a.name||''} · ${b.name||''}</div>
+    <table class="cmp-table">
+      <thead><tr>
+        <th>Metric</th>
+        <th>${a.symbol}</th>
+        <th>${b.symbol}</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  document.getElementById('compareModal').style.display = 'flex';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  PRICE / SIGNAL ALERTS
+// ══════════════════════════════════════════════════════════════════════════
+(function initAlerts() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+})();
+
+function openAlertModal(symbol) {
+  const r = allResults.find(x => x.symbol === symbol);
+  if (!r) return;
+  const alerts = JSON.parse(localStorage.getItem('usa_alerts') || '[]');
+  const existing = alerts.filter(a => a.symbol === symbol);
+  document.getElementById('alertContent').innerHTML = `
+    <h3 class="cmp-title">🔔 Alerts for ${symbol}</h3>
+    <div class="cmp-sub">Current price: $${parseFloat(r.price).toFixed(2)} · Score: ${r.score}</div>
+    <div class="alert-form">
+      <div class="alert-row">
+        <select id="alertType" class="ctrl-select">
+          <option value="price_above">Price ≥</option>
+          <option value="price_below">Price ≤</option>
+          <option value="score_above">Score ≥</option>
+        </select>
+        <input id="alertValue" class="range-inp" type="number" placeholder="Value" style="flex:1">
+        <button class="cf-btn chart-btn" onclick="saveAlert('${symbol}')">+ Add</button>
+      </div>
+    </div>
+    ${existing.length ? `<div class="alert-existing">
+      <div class="cmp-sub" style="margin-bottom:6px">Active alerts:</div>
+      ${existing.map((a,i)=>`<div class="alert-item">
+        <span>${a.type==='price_above'?'Price ≥':a.type==='price_below'?'Price ≤':'Score ≥'} ${a.value}</span>
+        <button onclick="removeAlert('${symbol}',${i})" class="cf-btn danger">✕</button>
+      </div>`).join('')}
+    </div>` : ''}`;
+  document.getElementById('alertModal').style.display = 'flex';
+}
+
+function saveAlert(symbol) {
+  const type  = document.getElementById('alertType')?.value;
+  const value = parseFloat(document.getElementById('alertValue')?.value);
+  if (!type || isNaN(value)) return;
+  const alerts = JSON.parse(localStorage.getItem('usa_alerts') || '[]');
+  alerts.push({ symbol, type, value, ts: Date.now() });
+  localStorage.setItem('usa_alerts', JSON.stringify(alerts));
+  openAlertModal(symbol);
+}
+
+function removeAlert(symbol, idx) {
+  let alerts = JSON.parse(localStorage.getItem('usa_alerts') || '[]');
+  const symAlerts = alerts.filter(a => a.symbol === symbol);
+  symAlerts.splice(idx, 1);
+  alerts = [...alerts.filter(a => a.symbol !== symbol), ...symAlerts];
+  localStorage.setItem('usa_alerts', JSON.stringify(alerts));
+  openAlertModal(symbol);
+}
+
+function closeAlertModal() { document.getElementById('alertModal').style.display = 'none'; }
+
+function checkAlerts(results) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const alerts = JSON.parse(localStorage.getItem('usa_alerts') || '[]');
+  alerts.forEach(a => {
+    const s = results.find(r => r.symbol === a.symbol);
+    if (!s) return;
+    let triggered = false;
+    let msg = '';
+    if (a.type === 'price_above' && s.price >= a.value) { triggered = true; msg = `Price $${s.price} ≥ $${a.value}`; }
+    if (a.type === 'price_below' && s.price <= a.value) { triggered = true; msg = `Price $${s.price} ≤ $${a.value}`; }
+    if (a.type === 'score_above' && s.score >= a.value) { triggered = true; msg = `Score ${s.score} ≥ ${a.value}`; }
+    if (triggered) new Notification(`📈 ${a.symbol} Alert`, { body: msg, icon: '/static/favicon.ico' });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 //  NEWS SECTION
 // ══════════════════════════════════════════════════════════════════════════
 let allNews    = [];
@@ -906,9 +1129,23 @@ function renderNews() {
     approv:'✅', ma:'🏢', div:'💰', news:'📰',
   };
 
+  const BULL_WORDS = ['beat','surge','upgrade','record','rally','growth','profit','soar','rise','strong','exceed'];
+  const BEAR_WORDS = ['miss','drop','downgrade','loss','cut','decline','risk','fall','weak','below','layoff'];
+  function scoreSentiment(title) {
+    const h = (title||'').toLowerCase();
+    const b = BULL_WORDS.filter(w => h.includes(w)).length;
+    const r = BEAR_WORDS.filter(w => h.includes(w)).length;
+    if (b > r) return 'pos';
+    if (r > b) return 'neg';
+    return '';
+  }
+
   feed.innerHTML = list.map(n => {
-    const emoji = CAT_EMOJI[n.cat_cls] || '📰';
-    const sent  = n.sentiment === 'pos' ? 'pos' : n.sentiment === 'neg' ? 'neg' : '';
+    const emoji    = CAT_EMOJI[n.cat_cls] || '📰';
+    const sentCls  = n.sentiment === 'pos' ? 'pos' : n.sentiment === 'neg' ? 'neg' : scoreSentiment(n.title);
+    const sent     = sentCls;
+    const sentBadge = sentCls === 'pos' ? '<span class="sent-badge pos">▲ Bullish</span>'
+                    : sentCls === 'neg' ? '<span class="sent-badge neg">▼ Bearish</span>' : '';
     const thumb = n.thumb
       ? `<img class="ni-thumb" src="${n.thumb}" alt="" onerror="this.style.display='none'">`
       : '';
@@ -918,6 +1155,7 @@ function renderNews() {
         <div class="ni-body">
           <div class="ni-meta">
             <span class="ni-cat-tag nc-${n.cat_cls}">${emoji} ${n.cat}</span>
+            ${sentBadge}
             <span class="ni-sep">·</span>
             <span class="ni-source">${n.source}</span>
             <span class="ni-time">${n.time_str}</span>

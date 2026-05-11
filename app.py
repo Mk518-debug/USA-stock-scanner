@@ -63,6 +63,8 @@ def scan():
     max_price  = float(data.get('max_price',  0) or 0)
     min_vol    = int(data.get('min_volume',   0) or 0)
     market_cap = data.get('market_cap', 'all')
+    rsi_min    = float(data.get('rsi_min', 0)  or 0)
+    rsi_max    = float(data.get('rsi_max', 100) or 100)
 
     custom_syms = [s.strip().upper() for s in custom if s.strip()]
 
@@ -117,6 +119,10 @@ def scan():
         results = [r for r in results if (r.get('price') or 0) <= max_price]
     if min_vol > 0:
         results = [r for r in results if (r.get('volume') or 0) >= min_vol]
+    if rsi_min > 0:
+        results = [r for r in results if (r.get('rsi') or 0) >= rsi_min]
+    if rsi_max < 100:
+        results = [r for r in results if (r.get('rsi') or 100) <= rsi_max]
 
     candles    = [r['last_candle'] for r in results if r.get('last_candle')]
     data_as_of = max(candles) if candles else ny_time()
