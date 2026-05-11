@@ -529,8 +529,9 @@ function buildCard(r) {
   <!-- ─── Current price ─── -->
   <div class="sk-price-row">
     <span class="cp-label">Current Price:</span>
-    <span class="cp-val">$${(r.price||0).toLocaleString()}</span>
-    ${r.supertrend ? `<span class="st-badge ${r.supertrend_dir===1?'bull':'bear'} ml-auto">ST ${r.supertrend_dir===1?'▲':'▼'} ${r.supertrend}</span>` : ''}
+    <span class="cp-val">$${parseFloat(r.price||0).toFixed(2)}</span>
+    <span class="cp-change ${chgCl}" style="margin-left:4px">${chgS}${r.change_pct||0}%</span>
+    ${r.supertrend ? `<span class="st-badge ${r.supertrend_dir===1?'bull':'bear'}">ST ${r.supertrend_dir===1?'▲':'▼'}</span>` : ''}
   </div>
 
   <!-- ─── Entry & Objectives AB.SK ─── -->

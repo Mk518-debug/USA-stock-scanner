@@ -268,9 +268,12 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 .sk-m-val.bear  { color: var(--red); }
 
 /* ── Current price row ── */
-.sk-price-row   { padding: 7px 14px; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.02); }
-.cp-label       { font-size: 0.7rem; color: var(--text3); flex-shrink: 0; }
-.cp-val         { font-size: 1.05rem; font-weight: 800; color: #fff; }
+.sk-price-row   { padding: 8px 14px; display: flex; align-items: center; gap: 8px; background: var(--bg3); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.cp-label       { font-size: 0.72rem; color: var(--text3); flex-shrink: 0; }
+.cp-val         { font-size: 1.2rem; font-weight: 900; color: #fff; letter-spacing: 0.3px; }
+.cp-change      { font-size: 0.8rem; font-weight: 700; }
+.cp-change.bull { color: var(--green); }
+.cp-change.bear { color: var(--red); }
 .st-badge       { font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; }
 .st-badge.bull  { background: rgba(0,230,118,.12); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
 .st-badge.bear  { background: rgba(255,23,68,.1);  color: var(--red);   border: 1px solid rgba(255,23,68,.25); }
