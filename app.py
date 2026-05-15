@@ -3,6 +3,7 @@ import time
 import traceback
 import numpy as np
 import pandas as pd
+import yfinance as yf
 from datetime import date as _date
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
