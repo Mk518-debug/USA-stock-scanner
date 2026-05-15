@@ -1168,19 +1168,18 @@ async function startOptionsScan() {
     document.getElementById('optProgFill').style.width  = `${Math.round((i+1)/stocks.length*100)}%`;
 
     try {
-      const res = await fetch('/api/options', {
+      const res = await fetch('/api/options_fast', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ symbol: r.symbol, price: r.price }),
       });
       const d = await res.json();
       if (!d.rate_limited && !d.error) {
-        d._scan = r;   // attach original scan result for context
+        d._scan = r;
         optScanData.push(d);
         _appendOptRow(d);
       } else if (d.rate_limited) {
-        // wait and retry once
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        const res2 = await fetch('/api/options', {
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        const res2 = await fetch('/api/options_fast', {
           method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ symbol: r.symbol, price: r.price }),
         });
@@ -1231,10 +1230,7 @@ function _optRowHTML(d) {
     <td class="${pcrCls}" style="font-weight:700">${d.pcr_vol}
       <div class="opt-td-sub ${pcrCls}">${d.pcr_signal}</div></td>
     <td class="${ivCls}" style="font-weight:700">${d.atm_iv}%
-      <div class="opt-td-sub">IVR ${d.iv_rank}%</div></td>
-    <td>${d.iv_rank}%</td>
-    <td class="${mpCls}" style="font-weight:700">$${d.max_pain}
-      <div class="opt-td-sub ${mpCls}">${d.mp_dist>0?'+':''}${d.mp_dist}%</div></td>
+      <div class="opt-td-sub">${d.iv_signal?.replace('_',' ')}</div></td>
     <td class="opt-td-uoa">${uoaCell}</td>
     <td class="bull" style="font-weight:700">${_fmtV(d.call_vol)}</td>
     <td class="bear" style="font-weight:700">${_fmtV(d.put_vol)}</td>

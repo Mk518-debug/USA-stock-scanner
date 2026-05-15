@@ -20,38 +20,48 @@ from core_regime import market_regime_score, regime_label
 app = Flask(__name__)
 CORS(app)
 
-# ── yfinance session: cookies + realistic headers + retry ────────────────
-_OPT_LOCK      = __import__('threading').Lock()
-_OPT_LAST_CALL = 0
-_OPT_MIN_GAP   = 4   # minimum seconds between options API hits
+# ── Shared singleton yfinance session (cookies fetched once) ─────────────
+import threading as _threading
+_SESSION_LOCK   = _threading.Lock()
+_SHARED_SESSION = None   # created on first use, reused forever
+_OPT_LOCK       = _threading.Lock()
+_OPT_LAST_CALL  = 0
+_OPT_MIN_GAP    = 2      # seconds between options hits (down from 4)
+
 
 def _yf_session():
-    """Return a requests.Session that looks like Chrome and carries YF cookies."""
-    s = requests.Session()
-    s.headers.update({
-        'User-Agent': (
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-            'AppleWebKit/537.36 (KHTML, like Gecko) '
-            'Chrome/124.0.0.0 Safari/537.36'
-        ),
-        'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection':      'keep-alive',
-    })
-    retry = Retry(total=4, backoff_factor=2,
-                  status_forcelist=[429, 500, 502, 503, 504])
-    s.mount('https://', HTTPAdapter(max_retries=retry))
-    # Pre-fetch Yahoo Finance to get session cookies (crumb/consent)
-    try:
-        s.get('https://finance.yahoo.com/', timeout=6)
-    except Exception:
-        pass
-    return s
+    """Singleton Chrome-like session; initialises cookies once."""
+    global _SHARED_SESSION
+    if _SHARED_SESSION is not None:
+        return _SHARED_SESSION
+    with _SESSION_LOCK:
+        if _SHARED_SESSION is not None:          # double-checked locking
+            return _SHARED_SESSION
+        s = requests.Session()
+        s.headers.update({
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/124.0.0.0 Safari/537.36'
+            ),
+            'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection':      'keep-alive',
+        })
+        retry = Retry(total=4, backoff_factor=2,
+                      status_forcelist=[429, 500, 502, 503, 504])
+        s.mount('https://', HTTPAdapter(max_retries=retry))
+        try:
+            s.get('https://finance.yahoo.com/', timeout=6)
+        except Exception:
+            pass
+        _SHARED_SESSION = s
+    return _SHARED_SESSION
 
 
 def _throttled_ticker(symbol):
-    """Rate-limited yf.Ticker: enforces _OPT_MIN_GAP between calls."""
+    """Rate-limited yf.Ticker using the shared session."""
     global _OPT_LAST_CALL
     with _OPT_LOCK:
         gap = time.time() - _OPT_LAST_CALL
@@ -389,53 +399,137 @@ def analyst_rating():
     return jsonify(payload)
 
 
-def _calc_max_pain(calls, puts):
-    """Strike where aggregate option holder loss is minimised (max writer gain)."""
-    strikes = sorted(set(
-        calls['strike'].dropna().tolist() + puts['strike'].dropna().tolist()
-    ))
+def _calc_max_pain(calls, puts, price, max_strikes=30):
+    """Fast max pain: only considers top-OI strikes within ±20% of price."""
+    c = calls.copy(); p = puts.copy()
+    for df in (c, p):
+        df['openInterest'] = pd.to_numeric(df['openInterest'], errors='coerce').fillna(0)
+    if price:
+        lo, hi = price * 0.80, price * 1.20
+        c = c[c['strike'].between(lo, hi)]
+        p = p[p['strike'].between(lo, hi)]
+    # Keep only highest-OI strikes to bound iteration
+    top_c = set(c.nlargest(max_strikes, 'openInterest')['strike'].tolist())
+    top_p = set(p.nlargest(max_strikes, 'openInterest')['strike'].tolist())
+    strikes = sorted(top_c | top_p)
     if not strikes:
         return None
-    min_pain = float('inf')
-    mp = strikes[len(strikes) // 2]
+    c_arr = list(zip(c['strike'], c['openInterest']))
+    p_arr = list(zip(p['strike'], p['openInterest']))
+    min_pain, mp = float('inf'), strikes[len(strikes) // 2]
     for test in strikes:
-        c_loss = sum(
-            max(0.0, float(test) - float(s)) * float(oi)
-            for s, oi in zip(calls['strike'], calls['openInterest'].fillna(0))
-        )
-        p_loss = sum(
-            max(0.0, float(s) - float(test)) * float(oi)
-            for s, oi in zip(puts['strike'], puts['openInterest'].fillna(0))
-        )
-        total = c_loss + p_loss
+        total = (sum(max(0.0, float(test) - float(s)) * float(oi) for s, oi in c_arr)
+               + sum(max(0.0, float(s) - float(test)) * float(oi) for s, oi in p_arr))
         if total < min_pain:
-            min_pain = total
-            mp = test
+            min_pain, mp = total, test
     return float(mp)
 
 
-def _uoa(df, opt_type, price, threshold=3.0, min_vol=300):
-    """Top unusual options by Vol/OI ratio."""
-    d = df.copy()
+def _uoa(df, opt_type, price, threshold=3.0, min_vol=200, top_n=3):
+    """Top unusual options by Vol/OI ratio (faster: fewer rows)."""
+    d = df[['strike', 'volume', 'openInterest', 'impliedVolatility']].copy()
     d['volume']       = pd.to_numeric(d['volume'],       errors='coerce').fillna(0)
     d['openInterest'] = pd.to_numeric(d['openInterest'], errors='coerce').fillna(1)
-    d['iv']           = pd.to_numeric(d.get('impliedVolatility', 0), errors='coerce').fillna(0)
-    d['vol_oi'] = d['volume'] / d['openInterest'].clip(lower=1)
+    d['iv']           = pd.to_numeric(d['impliedVolatility'], errors='coerce').fillna(0)
+    d['vol_oi']       = d['volume'] / d['openInterest'].clip(lower=1)
     mask = (d['vol_oi'] >= threshold) & (d['volume'] >= min_vol)
-    top  = d[mask].nlargest(4, 'volume')
     rows = []
-    for _, r in top.iterrows():
+    for _, r in d[mask].nlargest(top_n, 'vol_oi').iterrows():
         s = float(r['strike'])
         rows.append({
-            'strike':  s,
-            'volume':  int(r['volume']),
-            'oi':      int(r['openInterest']),
-            'vol_oi':  round(float(r['vol_oi']), 1),
-            'iv':      round(float(r['iv']) * 100, 1),
-            'type':    opt_type,
-            'otm':     (s > price if opt_type == 'call' else s < price) if price else False,
+            'strike': s, 'volume': int(r['volume']), 'oi': int(r['openInterest']),
+            'vol_oi': round(float(r['vol_oi']), 1), 'iv': round(float(r['iv']) * 100, 1),
+            'type':   opt_type,
+            'otm':    (s > price if opt_type == 'call' else s < price) if price else False,
         })
     return rows
+
+
+def _fast_options(symbol, price):
+    """
+    Lean options fetch for the scanner table: PCR + ATM IV + top UOA only.
+    Skips max pain and OI distribution — ~2× faster than full analysis.
+    """
+    ticker = _throttled_ticker(symbol)
+    exps   = ticker.options
+    if not exps:
+        return None
+    today  = _date.today()
+    expiry = next((e for e in exps[:6]
+                   if (_date.fromisoformat(e) - today).days >= 5), exps[0])
+    dte    = max(0, (_date.fromisoformat(expiry) - today).days)
+    chain  = ticker.option_chain(expiry)
+    calls, puts = chain.calls.copy(), chain.puts.copy()
+    for df in (calls, puts):
+        df['volume']       = pd.to_numeric(df['volume'],       errors='coerce').fillna(0)
+        df['openInterest'] = pd.to_numeric(df['openInterest'], errors='coerce').fillna(0)
+        df['impliedVolatility'] = pd.to_numeric(
+            df.get('impliedVolatility', 0), errors='coerce').fillna(0)
+    call_vol = float(calls['volume'].sum())
+    put_vol  = float(puts['volume'].sum())
+    pcr_vol  = round(put_vol / call_vol, 2) if call_vol > 0 else 0.0
+    pcr_sig  = 'bullish' if pcr_vol < 0.5 else 'bearish' if pcr_vol > 1.2 else 'neutral'
+    # ATM IV
+    if price > 0 and len(calls):
+        idx    = (calls['strike'] - price).abs().idxmin()
+        atm_iv = round(float(calls.loc[idx, 'impliedVolatility']) * 100, 1)
+    else:
+        iv_s   = calls['impliedVolatility'][calls['impliedVolatility'] > 0]
+        atm_iv = round(float(iv_s.median()) * 100, 1) if len(iv_s) else 0
+    iv_sig = ('very_high' if atm_iv > 80 else 'high' if atm_iv > 50 else
+              'elevated'  if atm_iv > 35 else 'normal' if atm_iv > 15 else 'low')
+    # Top UOA (calls only — strongest signal for bullish scanner)
+    uoa_calls = _uoa(calls, 'call', price, top_n=3)
+    uoa_puts  = _uoa(puts,  'put',  price, top_n=2)
+    # Score
+    score = 0
+    if pcr_sig == 'bullish':             score += 2
+    elif pcr_sig == 'bearish':           score -= 2
+    if len(uoa_calls) > len(uoa_puts):   score += 1
+    elif len(uoa_puts) > len(uoa_calls): score -= 1
+    return {
+        'symbol': symbol, 'expiry': expiry, 'dte': dte,
+        'call_vol': int(call_vol), 'put_vol': int(put_vol),
+        'call_oi': int(calls['openInterest'].sum()),
+        'put_oi':  int(puts['openInterest'].sum()),
+        'pcr_vol': pcr_vol, 'pcr_signal': pcr_sig,
+        'atm_iv': atm_iv, 'iv_signal': iv_sig, 'iv_rank': 50,
+        'max_pain': None, 'mp_dist': 0,
+        'uoa_calls': uoa_calls, 'uoa_puts': uoa_puts,
+        'oi_dist': [], 'opt_signal': ('bullish' if score >= 2 else
+                                       'bearish' if score <= -2 else 'neutral'),
+        'from_cache': False,
+    }
+
+
+@app.route('/api/options_fast', methods=['POST'])
+def options_fast():
+    """Fast options fetch for the scanner table (PCR + IV + UOA only)."""
+    data   = request.get_json(force=True) or {}
+    symbol = data.get('symbol', '').strip().upper()
+    price  = float(data.get('price', 0) or 0)
+    if not symbol:
+        return jsonify({'error': 'No symbol'}), 400
+
+    cache_key = f'optfast|{symbol}'
+    cached = _cache.get(cache_key)
+    if cached and time.time() - cached['ts'] < 1800:
+        cached['data']['from_cache'] = True
+        return jsonify(cached['data'])
+
+    try:
+        result = _fast_options(symbol, price)
+        if not result:
+            return jsonify({'error': 'No options available', 'symbol': symbol}), 200
+        _cset(cache_key, result)
+        return jsonify(result)
+    except Exception as e:
+        err = str(e)
+        if '429' in err or 'Too Many' in err or 'rate' in err.lower():
+            return jsonify({'error': 'Rate limited', 'rate_limited': True,
+                            'symbol': symbol}), 429
+        traceback.print_exc()
+        return jsonify({'error': err, 'symbol': symbol}), 500
 
 
 @app.route('/api/options', methods=['POST'])
@@ -454,6 +548,13 @@ def options_data():
         return jsonify(cached['data'])
 
     try:
+        # Check if fast-cache already has this symbol; add heavy metrics on top
+        fast_cached = _cache.get(f'optfast|{symbol}')
+        if fast_cached and time.time() - fast_cached['ts'] < 1800:
+            base = dict(fast_cached['data'])
+        else:
+            base = _fast_options(symbol, price) or {}
+
         ticker = _throttled_ticker(symbol)
         exps   = ticker.options
 
