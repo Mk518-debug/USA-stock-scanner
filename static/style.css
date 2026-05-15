@@ -86,9 +86,11 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 #scannerPanel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .sticky-bars  { flex-shrink: 0; background: var(--bg); z-index: 100; }
 
-/* Scroll zones — height set by JS, overflow handles the rest */
-.cards-area   { overflow-y: auto; overflow-x: hidden; padding: 16px; box-sizing: border-box; }
-#newsArea     { overflow-y: auto; overflow-x: hidden; padding: 16px; box-sizing: border-box; }
+/* All content panels sit inside #scannerPanel as flex children.
+   JS (fitScrollZones) sets their explicit px height so they scroll. */
+.cards-area        { overflow-y: auto; overflow-x: hidden; padding: 16px; box-sizing: border-box; }
+#newsArea          { overflow-y: auto; overflow-x: hidden; box-sizing: border-box; }
+#optionsScanArea   { overflow-y: auto; overflow-x: hidden; box-sizing: border-box; display: flex; flex-direction: column; }
 
 /* ════════════════════════════════════════════════════════
    Header
@@ -750,7 +752,7 @@ body.light .acc-panel { box-shadow: 0 1px 6px rgba(0,0,0,.07); }
 /* ════════════════════════════════════════════════════════
    Options Scanner Tab  (full section)
 ════════════════════════════════════════════════════════ */
-#optionsScanArea  { display: flex; flex-direction: column; overflow: hidden; height: 100%; }
+/* #optionsScanArea is a flex child of #scannerPanel — height set by fitScrollZones */
 
 /* Controls bar */
 .opt-scan-bar     { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px 16px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }

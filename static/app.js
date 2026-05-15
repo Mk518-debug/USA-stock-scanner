@@ -217,22 +217,27 @@ document.querySelectorAll('.ftab').forEach(tab => {
     tab.classList.add('active'); tab.setAttribute('aria-selected','true');
     activeTab = tab.dataset.tab;
     currentPage = 0;
-    const cardsEl   = document.getElementById('cardsArea');
-    const newsEl    = document.getElementById('newsArea');
-    const optEl     = document.getElementById('optionsScanArea');
-    const accEl     = document.getElementById('accuracyReport');
+    const cardsEl = document.getElementById('cardsArea');
+    const newsEl  = document.getElementById('newsArea');
+    const optEl   = document.getElementById('optionsScanArea');
+    const accEl   = document.getElementById('accuracyReport');
 
-    // Hide all panels
-    [cardsEl, newsEl, optEl].forEach(el => { if (el) el.style.display = 'none'; });
+    // Hide all switchable panels first
+    if (newsEl) newsEl.style.display  = 'none';
+    if (optEl)  optEl.style.display   = 'none';
 
     if (activeTab === 'news') {
-      if (newsEl) newsEl.style.display = '';
+      if (cardsEl) cardsEl.style.display = 'none';
+      if (accEl)   accEl.style.display   = 'none';
+      if (newsEl)  newsEl.style.display  = '';
       fetchNews();
     } else if (activeTab === 'optionsscan') {
-      if (optEl) optEl.style.display = '';
-      if (accEl) accEl.style.display = 'none';
+      if (cardsEl) cardsEl.style.display = 'none';
+      if (accEl)   accEl.style.display   = 'none';
+      if (optEl)   optEl.style.display   = '';
     } else {
       if (cardsEl) cardsEl.style.display = '';
+      if (accEl && allResults.length)    accEl.style.display = '';
       render();
     }
   });
@@ -249,9 +254,6 @@ function closeSidebar() {
   document.getElementById('sidebarBackdrop')?.classList.remove('active');
   document.body.style.overflow = '';
 }
-// Close sidebar after scan starts on mobile
-const _origStartScan = startScan;
-
 // ── Market / Custom switch ────────────────────────────────────────────────
 function switchMarket(mode) {
   document.getElementById('mtAll').classList.toggle('active',    mode === 'all');
@@ -300,9 +302,14 @@ async function startScan(force = false) {
     saveScanToHistory(data);
     checkAlerts(data.results);
 
-    document.getElementById('statsTop').style.display  = 'grid';
-    document.getElementById('filterBar').style.display = 'flex';
-    document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
+    document.getElementById('statsTop').style.display      = 'grid';
+    document.getElementById('filterBar').style.display     = 'flex';
+    // Always return to the cards view after a scan
+    document.getElementById('cardsArea').style.display     = '';
+    document.getElementById('newsArea').style.display      = 'none';
+    const osa = document.getElementById('optionsScanArea');
+    if (osa) osa.style.display = 'none';
+    document.querySelectorAll('.ftab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
     document.querySelector('.ftab[data-tab="all"]').classList.add('active');
     activeTab = 'all';
     render();
