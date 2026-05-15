@@ -210,18 +210,36 @@ def scan():
     # Average score
     avg_score = round(sum(r['score'] for r in results) / max(total, 1), 1)
 
-    # Regime-direction match (bull regime + bullish majority or vice versa)
+    # Regime-direction match
     bull_majority = len(bull_res) > len(bear_res)
     regime_match  = (reg >= 55 and bull_majority) or (reg <= 45 and not bull_majority)
 
-    # Quality score (0-100): blend of clarity, high-conf, avg-score, regime match
+    # Average vote-consensus across all results (higher = cleaner signals)
+    consensuses = []
+    for r in results:
+        uv = r.get('up_votes', 0) or 0
+        dv = r.get('down_votes', 0) or 0
+        tv = uv + dv
+        if tv > 0:
+            consensuses.append(max(uv, dv) / tv * 100)
+    avg_consensus = round(sum(consensuses) / len(consensuses), 1) if consensuses else 50
+
+    # Weak-signal penalty: Trend signals should dominate; too many Weak/Mixed = lower score
+    weak_pct  = int(len([r for r in results if r.get('signal_type') in ('Weak', 'Mixed')])
+                    / max(total, 1) * 100)
+    weak_pen  = max(0, (weak_pct - 40) * 0.3)   # penalty kicks in above 40% weak
+
+    # Quality score (0-100): 6-factor blend
     quality_score = int(
-        clarity_pct                          * 0.35
-        + (high_conf / max(total, 1) * 100) * 0.25
-        + min(100, avg_score)               * 0.30
-        + (10 if regime_match else 0)       * 0.10
+        clarity_pct                           * 0.25   # vote-diff clarity
+        + (high_conf / max(total, 1) * 100)  * 0.20   # high-confidence ratio
+        + min(100, avg_score)                * 0.20   # raw score average
+        + avg_consensus                      * 0.20   # vote consensus depth
+        + trend_pct                          * 0.10   # Trend-type dominance
+        + (10 if regime_match else 0)        * 0.05   # macro regime alignment
+        - weak_pen                                     # weak-signal penalty
     )
-    quality_score = min(100, quality_score)
+    quality_score = max(0, min(100, quality_score))
 
     # Grade
     scan_grade = ('A' if quality_score >= 80 else

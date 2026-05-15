@@ -541,24 +541,33 @@ def analyze(symbol, timeframe='1d'):
             bb_mid, mtf, div,
             stoch_k, stoch_d, mom_sc)
 
-        vote_diff = abs(up_votes - down_votes)
+        vote_diff   = abs(up_votes - down_votes)
         total_votes = up_votes + down_votes
-        # Signal type with quality-aware thresholds
         if div and ((div == 'bullish' and down_votes > up_votes) or
                     (div == 'bearish' and up_votes > down_votes)):
             signal_type = 'Reversal'
-        elif vote_diff >= 4:
+        elif vote_diff >= 4 and adx_val > 20:
+            signal_type = 'Trend'
+        elif vote_diff >= 3 and total_votes >= 7:
             signal_type = 'Trend'
         elif vote_diff >= 2:
             signal_type = 'Mixed'
         else:
             signal_type = 'Weak'
 
-        # ── Indicator accuracy bonus: consensus alignment boost ───────────────
-        # When all major indicators agree, boost confidence
+        # ── Vote-consensus quality multiplier ────────────────────────────────
         consensus_ratio = max(up_votes, down_votes) / max(total_votes, 1)
-        if consensus_ratio >= 0.75 and total_votes >= 7:
-            strength = min(100, int(strength * 1.1))
+        if   consensus_ratio >= 0.78 and total_votes >= 7:
+            strength = min(100, int(strength * 1.18))   # strong consensus bonus
+        elif consensus_ratio >= 0.65 and total_votes >= 5:
+            strength = min(100, int(strength * 1.08))   # moderate consensus bonus
+        elif consensus_ratio < 0.55:
+            strength = max(0,   int(strength * 0.88))   # weak consensus penalty
+        # ADX trend-strength bonus / penalty (same as TV path)
+        if adx_val >= 30 and direction != 'Neutral':
+            strength = min(100, int(strength * 1.08))
+        elif adx_val < 15:
+            strength = max(0, int(strength * 0.92))
 
         # ── Candlestick + technical patterns ─────────────────────────────────
         patterns = candle_patterns(opens, high, low, close)

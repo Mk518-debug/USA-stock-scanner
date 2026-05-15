@@ -50,8 +50,19 @@ def _direction(v):
 
 
 def _strength(v):
+    """
+    Non-linear mapping of Recommend.All (-1→1) to quality score (0-100).
+    Old linear mapping (rec*100) gave Strong Buy (0.5) only 50 pts.
+    New mapping:
+      Strong Buy  ≥ 0.5 → 65-100
+      Buy        0.1-0.5 → 38-65
+      Neutral  < 0.1   → 0-15  (filtered by default min_score)
+    """
     if v is None: return 0
-    return min(100, int(abs(v) * 100))
+    a = abs(v)
+    if a >= 0.5:   return min(100, int(60 + (a - 0.5) * 80))   # 60 – 100
+    elif a >= 0.1: return int(30 + (a - 0.1) * 75)              # 30 – 60
+    else:          return int(a * 150)                           # 0 – 15
 
 
 def _tv_votes(c, e20, e50, e200, ml, ms, r, vr, adx, pdi, ndi, rec, bb_mid,
@@ -111,10 +122,13 @@ def _tv_votes(c, e20, e50, e200, ml, ms, r, vr, adx, pdi, ndi, rec, bb_mid,
     return up, down
 
 
-def _signal_type_from_votes(up, down):
-    diff = abs(up - down)
-    if diff >= 3: return 'Trend'
-    return 'Mixed'
+def _signal_type_from_votes(up, down, adx=0):
+    diff  = abs(up - down)
+    total = up + down
+    if diff >= 4 and adx > 20:             return 'Trend'
+    if diff >= 3:                           return 'Trend'
+    if diff >= 2 and total >= 6:            return 'Mixed'
+    return 'Weak'
 
 
 def fetch_analyst_tv(tv_symbol):
@@ -305,7 +319,20 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
             price, e20, e50, e200, macd, msig, rsi, vr,
             adx_val, pdi, ndi, rec, bb_mid,
             htf_e20, htf_e50, htf_c)
-        signal_type = _signal_type_from_votes(up_votes, down_votes)
+        signal_type = _signal_type_from_votes(up_votes, down_votes, adx_val)
+
+        # ── Vote-consensus quality multiplier ─────────────────────────────
+        total_v = up_votes + down_votes
+        if total_v >= 5:
+            consensus = max(up_votes, down_votes) / total_v
+            if   consensus >= 0.75: strength = min(100, int(strength * 1.20))
+            elif consensus >= 0.65: strength = min(100, int(strength * 1.10))
+            elif consensus <  0.55: strength = max(0,   int(strength * 0.85))
+        # ADX trend-strength bonus
+        if adx_val >= 30 and direction != 'Neutral':
+            strength = min(100, int(strength * 1.08))
+        elif adx_val < 15:
+            strength = max(0, int(strength * 0.90))  # choppy market penalty
 
         # BB Squeeze (from TV data)
         bb_squeeze = 0
