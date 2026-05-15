@@ -20,24 +20,45 @@ from core_regime import market_regime_score, regime_label
 app = Flask(__name__)
 CORS(app)
 
-# ── Shared yfinance session (avoids per-call rate limits) ────────────────
-_YF_HEADERS = {
-    'User-Agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-        'AppleWebKit/537.36 (KHTML, like Gecko) '
-        'Chrome/124.0.0.0 Safari/537.36'
-    ),
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-}
+# ── yfinance session: cookies + realistic headers + retry ────────────────
+_OPT_LOCK      = __import__('threading').Lock()
+_OPT_LAST_CALL = 0
+_OPT_MIN_GAP   = 4   # minimum seconds between options API hits
 
 def _yf_session():
+    """Return a requests.Session that looks like Chrome and carries YF cookies."""
     s = requests.Session()
-    s.headers.update(_YF_HEADERS)
-    retry = Retry(total=3, backoff_factor=1.5,
+    s.headers.update({
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/124.0.0.0 Safari/537.36'
+        ),
+        'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection':      'keep-alive',
+    })
+    retry = Retry(total=4, backoff_factor=2,
                   status_forcelist=[429, 500, 502, 503, 504])
     s.mount('https://', HTTPAdapter(max_retries=retry))
+    # Pre-fetch Yahoo Finance to get session cookies (crumb/consent)
+    try:
+        s.get('https://finance.yahoo.com/', timeout=6)
+    except Exception:
+        pass
     return s
+
+
+def _throttled_ticker(symbol):
+    """Rate-limited yf.Ticker: enforces _OPT_MIN_GAP between calls."""
+    global _OPT_LAST_CALL
+    with _OPT_LOCK:
+        gap = time.time() - _OPT_LAST_CALL
+        if gap < _OPT_MIN_GAP:
+            time.sleep(_OPT_MIN_GAP - gap)
+        _OPT_LAST_CALL = time.time()
+    return yf.Ticker(symbol, session=_yf_session())
 
 
 @app.errorhandler(Exception)
@@ -312,7 +333,7 @@ def analyst_rating():
     # ── 2. yfinance — recommendations_summary ────────────────────────────
     if total == 0:
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, session=_yf_session())
             recs   = ticker.recommendations_summary
             if recs is not None and not recs.empty:
                 row = recs.iloc[0]
@@ -329,7 +350,7 @@ def analyst_rating():
     # ── 3. yfinance — analyst_price_targets (targets only) ───────────────
     if target is None:
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, session=_yf_session())
             apt    = ticker.analyst_price_targets
             if isinstance(apt, dict) and apt.get('mean'):
                 target   = round(float(apt['mean']), 2)
@@ -433,7 +454,7 @@ def options_data():
         return jsonify(cached['data'])
 
     try:
-        ticker = yf.Ticker(symbol, session=_yf_session())
+        ticker = _throttled_ticker(symbol)
         exps   = ticker.options
 
         if not exps:
