@@ -788,15 +788,6 @@ function buildCard(r) {
     <div class="sk-agree">Agree: ${r.last_candle||'—'} (${upV} indicators) ↺</div>
   </div>
 
-  <!-- ─── Options Activity (lazy) ─── -->
-  <div class="analyst-section">
-    <button class="analyst-toggle" id="options_btn_${r.symbol}"
-            onclick="toggleOptions('${r.symbol}',${r.price})">
-      📈 Options Activity ▾
-    </button>
-    <div id="options_${r.symbol}" class="analyst-content" style="display:none"></div>
-  </div>
-
   <!-- ─── Analyst Rating (lazy) ─── -->
   <div class="analyst-section">
     <button class="analyst-toggle" id="analyst_btn_${r.symbol}"
