@@ -752,6 +752,11 @@ body.light .acc-panel { box-shadow: 0 1px 6px rgba(0,0,0,.07); }
 ════════════════════════════════════════════════════════ */
 .opt-wrap       { display: flex; flex-direction: column; gap: 0; }
 .opt-nodata     { text-align: center; padding: 14px 0; font-size: 0.78rem; color: var(--text3); }
+.opt-rate-limit { text-align: center; padding: 16px 8px; }
+.opt-rl-icon    { font-size: 1.8rem; margin-bottom: 6px; }
+.opt-rl-msg     { font-size: 0.78rem; color: var(--yellow); margin-bottom: 10px; line-height: 1.4; }
+.opt-retry-btn  { background: var(--bg3); border: 1px solid var(--border2); color: var(--text2); padding: 6px 16px; border-radius: 20px; cursor: pointer; font-size: 0.78rem; font-weight: 700; transition: all .15s; }
+.opt-retry-btn:hover { border-color: var(--blue); color: var(--blue); }
 
 /* Header */
 .opt-header     { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 8px; }

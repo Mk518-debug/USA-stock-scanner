@@ -4,6 +4,9 @@ import traceback
 import numpy as np
 import pandas as pd
 import yfinance as yf
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from datetime import date as _date
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
@@ -16,6 +19,25 @@ from core_regime import market_regime_score, regime_label
 
 app = Flask(__name__)
 CORS(app)
+
+# ── Shared yfinance session (avoids per-call rate limits) ────────────────
+_YF_HEADERS = {
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/124.0.0.0 Safari/537.36'
+    ),
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+}
+
+def _yf_session():
+    s = requests.Session()
+    s.headers.update(_YF_HEADERS)
+    retry = Retry(total=3, backoff_factor=1.5,
+                  status_forcelist=[429, 500, 502, 503, 504])
+    s.mount('https://', HTTPAdapter(max_retries=retry))
+    return s
 
 
 @app.errorhandler(Exception)
@@ -405,13 +427,13 @@ def options_data():
         return jsonify({'error': 'No symbol provided'}), 400
 
     cache_key = f'options2|{symbol}'
-    cached = _cget(cache_key)
-    if cached:
-        cached['from_cache'] = True
-        return jsonify(cached)
+    cached = _cache.get(cache_key)
+    if cached and time.time() - cached['ts'] < 1800:   # 30-min cache for options
+        cached['data']['from_cache'] = True
+        return jsonify(cached['data'])
 
     try:
-        ticker = yf.Ticker(symbol)
+        ticker = yf.Ticker(symbol, session=_yf_session())
         exps   = ticker.options
 
         if not exps:
@@ -539,8 +561,14 @@ def options_data():
         return jsonify(payload)
 
     except Exception as e:
+        err = str(e)
+        if '429' in err or 'Too Many' in err or 'rate' in err.lower():
+            return jsonify({
+                'error': 'Yahoo Finance rate limit hit — please wait 30–60 seconds and try again.',
+                'rate_limited': True, 'symbol': symbol,
+            }), 429
         traceback.print_exc()
-        return jsonify({'error': str(e), 'symbol': symbol}), 500
+        return jsonify({'error': err, 'symbol': symbol}), 500
 
 
 @app.route('/api/sectors')

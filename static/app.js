@@ -1264,10 +1264,27 @@ async function toggleOptions(symbol, price) {
       body: JSON.stringify({ symbol, price }),
     });
     const d = await res.json();
+
+    if (res.status === 429 || d.rate_limited) {
+      // Don't mark loaded — allow retry
+      content.innerHTML = `
+        <div class="opt-rate-limit">
+          <div class="opt-rl-icon">⏳</div>
+          <div class="opt-rl-msg">Yahoo Finance rate limit — wait 30–60 s then retry</div>
+          <button class="opt-retry-btn" onclick="
+            document.getElementById('options_${symbol}').dataset.loaded='';
+            toggleOptions('${symbol}',${price})">↺ Retry</button>
+        </div>`;
+      return;
+    }
+
     content.dataset.loaded = '1';
     content.innerHTML = _buildOptionsPanel(d, price);
   } catch(e) {
-    content.innerHTML = '<div class="opt-nodata">Failed to load options data</div>';
+    content.innerHTML = `<div class="opt-nodata">Failed to load options data<br>
+      <button class="opt-retry-btn" style="margin-top:8px" onclick="
+        document.getElementById('options_${symbol}').dataset.loaded='';
+        toggleOptions('${symbol}',${price})">↺ Retry</button></div>`;
   }
 }
 
