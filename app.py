@@ -1,7 +1,9 @@
 import os
 import time
 import traceback
+import numpy as np
 import pandas as pd
+from datetime import date as _date
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
@@ -341,6 +343,203 @@ def analyst_rating():
 
     _cset(cache_key, payload)
     return jsonify(payload)
+
+
+def _calc_max_pain(calls, puts):
+    """Strike where aggregate option holder loss is minimised (max writer gain)."""
+    strikes = sorted(set(
+        calls['strike'].dropna().tolist() + puts['strike'].dropna().tolist()
+    ))
+    if not strikes:
+        return None
+    min_pain = float('inf')
+    mp = strikes[len(strikes) // 2]
+    for test in strikes:
+        c_loss = sum(
+            max(0.0, float(test) - float(s)) * float(oi)
+            for s, oi in zip(calls['strike'], calls['openInterest'].fillna(0))
+        )
+        p_loss = sum(
+            max(0.0, float(s) - float(test)) * float(oi)
+            for s, oi in zip(puts['strike'], puts['openInterest'].fillna(0))
+        )
+        total = c_loss + p_loss
+        if total < min_pain:
+            min_pain = total
+            mp = test
+    return float(mp)
+
+
+def _uoa(df, opt_type, price, threshold=3.0, min_vol=300):
+    """Top unusual options by Vol/OI ratio."""
+    d = df.copy()
+    d['volume']       = pd.to_numeric(d['volume'],       errors='coerce').fillna(0)
+    d['openInterest'] = pd.to_numeric(d['openInterest'], errors='coerce').fillna(1)
+    d['iv']           = pd.to_numeric(d.get('impliedVolatility', 0), errors='coerce').fillna(0)
+    d['vol_oi'] = d['volume'] / d['openInterest'].clip(lower=1)
+    mask = (d['vol_oi'] >= threshold) & (d['volume'] >= min_vol)
+    top  = d[mask].nlargest(4, 'volume')
+    rows = []
+    for _, r in top.iterrows():
+        s = float(r['strike'])
+        rows.append({
+            'strike':  s,
+            'volume':  int(r['volume']),
+            'oi':      int(r['openInterest']),
+            'vol_oi':  round(float(r['vol_oi']), 1),
+            'iv':      round(float(r['iv']) * 100, 1),
+            'type':    opt_type,
+            'otm':     (s > price if opt_type == 'call' else s < price) if price else False,
+        })
+    return rows
+
+
+@app.route('/api/options', methods=['POST'])
+def options_data():
+    data   = request.get_json(force=True) or {}
+    symbol = data.get('symbol', '').strip().upper()
+    price  = float(data.get('price', 0) or 0)
+
+    if not symbol:
+        return jsonify({'error': 'No symbol provided'}), 400
+
+    cache_key = f'options2|{symbol}'
+    cached = _cget(cache_key)
+    if cached:
+        cached['from_cache'] = True
+        return jsonify(cached)
+
+    try:
+        ticker = yf.Ticker(symbol)
+        exps   = ticker.options
+
+        if not exps:
+            return jsonify({'error': 'No options available for this symbol',
+                            'symbol': symbol}), 200
+
+        # Pick nearest expiry that is at least 5 days away
+        today = _date.today()
+        expiry = exps[0]
+        for e in exps[:8]:
+            try:
+                if (_date.fromisoformat(e) - today).days >= 5:
+                    expiry = e
+                    break
+            except Exception:
+                pass
+
+        dte = max(0, (_date.fromisoformat(expiry) - today).days)
+
+        chain = ticker.option_chain(expiry)
+        calls = chain.calls.copy()
+        puts  = chain.puts.copy()
+
+        for df in (calls, puts):
+            df['volume']       = pd.to_numeric(df['volume'],       errors='coerce').fillna(0)
+            df['openInterest'] = pd.to_numeric(df['openInterest'], errors='coerce').fillna(0)
+            df['impliedVolatility'] = pd.to_numeric(
+                df.get('impliedVolatility', 0), errors='coerce').fillna(0)
+
+        # ── PCR ──────────────────────────────────────────────────────────
+        call_vol = float(calls['volume'].sum())
+        put_vol  = float(puts['volume'].sum())
+        call_oi  = float(calls['openInterest'].sum())
+        put_oi   = float(puts['openInterest'].sum())
+        pcr_vol  = round(put_vol / call_vol, 2) if call_vol > 0 else 0.0
+        pcr_oi   = round(put_oi  / call_oi,  2) if call_oi  > 0 else 0.0
+        pcr_sig  = ('bullish' if pcr_vol < 0.5  else
+                    'bearish' if pcr_vol > 1.2  else 'neutral')
+
+        # ── ATM IV ───────────────────────────────────────────────────────
+        if price > 0 and len(calls):
+            idx = (calls['strike'] - price).abs().idxmin()
+            atm_iv = round(float(calls.loc[idx, 'impliedVolatility']) * 100, 1)
+        else:
+            iv_vals = calls['impliedVolatility'][calls['impliedVolatility'] > 0]
+            atm_iv  = round(float(iv_vals.median()) * 100, 1) if len(iv_vals) else 0
+
+        iv_sig = ('very_high' if atm_iv > 80 else
+                  'high'      if atm_iv > 50 else
+                  'elevated'  if atm_iv > 35 else
+                  'normal'    if atm_iv > 15 else 'low')
+
+        # ── Max Pain ──────────────────────────────────────────────────────
+        max_pain = _calc_max_pain(calls, puts)
+        mp_dist  = round((max_pain - price) / price * 100, 1) if (max_pain and price) else 0
+
+        # ── UOA ───────────────────────────────────────────────────────────
+        uoa_calls = _uoa(calls, 'call', price)
+        uoa_puts  = _uoa(puts,  'put',  price)
+
+        # ── OI Distribution (±18% of current price) ───────────────────────
+        if price > 0:
+            lo, hi = price * 0.82, price * 1.18
+            c_near = calls[calls['strike'].between(lo, hi)]
+            p_near = puts[puts['strike'].between(lo, hi)]
+        else:
+            c_near, p_near = calls, puts
+
+        near_strikes = sorted(set(
+            c_near['strike'].tolist() + p_near['strike'].tolist()
+        ))[:14]
+
+        oi_dist = []
+        for s in near_strikes:
+            c_row = calls[calls['strike'] == s]
+            p_row = puts[puts['strike']  == s]
+            c_oi  = int(c_row['openInterest'].sum()) if len(c_row) else 0
+            p_oi  = int(p_row['openInterest'].sum()) if len(p_row) else 0
+            if c_oi + p_oi > 0:
+                oi_dist.append({'strike': s, 'call_oi': c_oi, 'put_oi': p_oi})
+
+        # ── IV Percentile (approx from chain spread) ──────────────────────
+        iv_vals = calls['impliedVolatility'][calls['impliedVolatility'] > 0] * 100
+        iv_min  = round(float(iv_vals.min()),  1) if len(iv_vals) else atm_iv
+        iv_max  = round(float(iv_vals.max()),  1) if len(iv_vals) else atm_iv
+        iv_rank = round((atm_iv - iv_min) / (iv_max - iv_min) * 100) if iv_max > iv_min else 50
+
+        # ── Overall Options Signal ────────────────────────────────────────
+        score = 0
+        if pcr_sig == 'bullish':          score += 2
+        elif pcr_sig == 'bearish':        score -= 2
+        if len(uoa_calls) > len(uoa_puts): score += 1
+        elif len(uoa_puts) > len(uoa_calls): score -= 1
+        if max_pain and price:
+            if max_pain > price:  score += 1
+            elif max_pain < price: score -= 1
+
+        opt_signal = ('bullish' if score >= 2 else
+                      'bearish' if score <= -2 else 'neutral')
+
+        payload = {
+            'symbol':       symbol,
+            'expiry':       expiry,
+            'dte':          dte,
+            'call_vol':     int(call_vol),
+            'put_vol':      int(put_vol),
+            'call_oi':      int(call_oi),
+            'put_oi':       int(put_oi),
+            'pcr_vol':      pcr_vol,
+            'pcr_oi':       pcr_oi,
+            'pcr_signal':   pcr_sig,
+            'atm_iv':       atm_iv,
+            'iv_rank':      iv_rank,
+            'iv_signal':    iv_sig,
+            'max_pain':     max_pain,
+            'mp_dist':      mp_dist,
+            'uoa_calls':    uoa_calls,
+            'uoa_puts':     uoa_puts,
+            'oi_dist':      oi_dist,
+            'opt_signal':   opt_signal,
+            'from_cache':   False,
+        }
+
+        _cset(cache_key, payload)
+        return jsonify(payload)
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'symbol': symbol}), 500
 
 
 @app.route('/api/sectors')

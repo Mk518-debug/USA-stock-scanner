@@ -772,6 +772,15 @@ function buildCard(r) {
     <div class="sk-agree">Agree: ${r.last_candle||'—'} (${upV} indicators) ↺</div>
   </div>
 
+  <!-- ─── Options Activity (lazy) ─── -->
+  <div class="analyst-section">
+    <button class="analyst-toggle" id="options_btn_${r.symbol}"
+            onclick="toggleOptions('${r.symbol}',${r.price})">
+      📈 Options Activity ▾
+    </button>
+    <div id="options_${r.symbol}" class="analyst-content" style="display:none"></div>
+  </div>
+
   <!-- ─── Analyst Rating (lazy) ─── -->
   <div class="analyst-section">
     <button class="analyst-toggle" id="analyst_btn_${r.symbol}"
@@ -1107,6 +1116,159 @@ function _buildTvRecGauge(rec, source) {
   <div class="ag-label" style="color:${labelColor}">${label}</div>
   <div class="ag-sub" style="margin-top:8px">Score: ${(rec*100).toFixed(0)} / 100</div>
 </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  OPTIONS ACTIVITY
+// ══════════════════════════════════════════════════════════════════════════
+
+function _fmtV(v) {
+  if (!v) return '0';
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
+  if (v >= 1_000)     return (v / 1_000).toFixed(0) + 'K';
+  return String(v);
+}
+
+function _buildOptionsPanel(d, price) {
+  if (d.error) return `<div class="opt-nodata">⚠ ${d.error}</div>`;
+
+  const pcrCls = d.pcr_signal === 'bullish' ? 'bull' : d.pcr_signal === 'bearish' ? 'bear' : '';
+  const ivCls  = d.iv_signal === 'high' || d.iv_signal === 'very_high' || d.iv_signal === 'elevated' ? 'bear' : d.iv_signal === 'low' ? 'bull' : '';
+  const mpCls  = d.mp_dist > 0 ? 'bull' : d.mp_dist < 0 ? 'bear' : '';
+  const sigCls = d.opt_signal === 'bullish' ? 'bull' : d.opt_signal === 'bearish' ? 'bear' : '';
+  const sigLbl = d.opt_signal === 'bullish' ? '▲ Bullish' : d.opt_signal === 'bearish' ? '▼ Bearish' : '● Neutral';
+
+  const pcrInterpret = d.pcr_vol < 0.5  ? 'Heavy call buying — bullish sentiment'
+                     : d.pcr_vol > 1.2  ? 'Heavy put buying — bearish / hedging'
+                     :                    'Balanced positioning';
+
+  const ivInterpret  = d.iv_signal === 'very_high' ? 'Expensive — major event expected'
+                     : d.iv_signal === 'high'      ? 'Elevated — event risk present'
+                     : d.iv_signal === 'elevated'  ? 'Above average — watch for breakout'
+                     : d.iv_signal === 'normal'    ? 'Normal range'
+                     :                               'Low — options cheap';
+
+  // UOA rows
+  const uoaAll = [...(d.uoa_calls||[]), ...(d.uoa_puts||[])]
+    .sort((a,b) => b.vol_oi - a.vol_oi).slice(0,6);
+
+  const uoaHTML = uoaAll.length ? `
+  <div class="opt-sec-title">Unusual Options Activity</div>
+  <div class="opt-uoa-table">
+    <div class="opt-uoa-head">
+      <span>Type</span><span>Strike</span><span>Volume</span>
+      <span>OI</span><span>Vol/OI</span><span>IV%</span>
+    </div>
+    ${uoaAll.map(u => `
+    <div class="opt-uoa-row ${u.type === 'call' ? 'bull' : 'bear'}">
+      <span class="opt-type-tag ${u.type === 'call' ? 'call-tag' : 'put-tag'}">${u.type.toUpperCase()}${u.otm ? ' OTM' : ''}</span>
+      <span class="opt-strike">$${u.strike}</span>
+      <span class="opt-vol">${_fmtV(u.volume)}</span>
+      <span class="opt-oi-num">${_fmtV(u.oi)}</span>
+      <span class="opt-ratio ${u.vol_oi >= 5 ? 'fire-ratio' : ''}">${u.vol_oi}×</span>
+      <span class="opt-iv">${u.iv}%</span>
+    </div>`).join('')}
+  </div>` : '<div class="opt-nodata" style="font-size:.75rem;padding:8px 0">No unusual activity detected</div>';
+
+  // OI Distribution
+  const maxOI = Math.max(...(d.oi_dist||[]).flatMap(r => [r.call_oi, r.put_oi]), 1);
+  const oiHTML = (d.oi_dist||[]).length ? `
+  <div class="opt-sec-title">Open Interest by Strike <span style="opacity:.5;font-weight:400">★ Max Pain  ◀ Price</span></div>
+  <div class="opt-oi-chart">
+    ${(d.oi_dist||[]).map(r => {
+      const cW = Math.round(r.call_oi / maxOI * 100);
+      const pW = Math.round(r.put_oi  / maxOI * 100);
+      const atP = price && Math.abs(r.strike - price) / price < 0.012;
+      const isMP = d.max_pain && r.strike === d.max_pain;
+      return `<div class="opt-oi-row${atP?' at-price':''}${isMP?' is-maxpain':''}">
+        <span class="opt-oi-strike">${r.strike}${atP?' ◀':''}${isMP?' ★':''}</span>
+        <div class="opt-oi-bars">
+          <div class="opt-bar-half call-half">
+            <div class="opt-bar-fill call-fill" style="width:${cW}%"></div>
+          </div>
+          <div class="opt-bar-half put-half">
+            <div class="opt-bar-fill put-fill" style="width:${pW}%"></div>
+          </div>
+        </div>
+        <span class="opt-oi-nums"><span class="bull">${_fmtV(r.call_oi)}</span>/<span class="bear">${_fmtV(r.put_oi)}</span></span>
+      </div>`;
+    }).join('')}
+    <div class="opt-oi-legend">
+      <span class="bull">■ Calls</span><span class="bear">■ Puts</span>
+    </div>
+  </div>` : '';
+
+  return `
+<div class="opt-wrap">
+
+  <!-- Header: expiry + signal -->
+  <div class="opt-header">
+    <span class="opt-expiry">Exp: ${d.expiry} &nbsp;·&nbsp; ${d.dte}d to expiry</span>
+    <span class="opt-sig-badge ${sigCls}">${sigLbl}</span>
+  </div>
+
+  <!-- 3 key metrics -->
+  <div class="opt-key-metrics">
+    <div class="opt-km">
+      <div class="opt-km-val ${pcrCls}">${d.pcr_vol}</div>
+      <div class="opt-km-lbl">P/C Ratio</div>
+      <div class="opt-km-hint ${pcrCls}">${d.pcr_signal.toUpperCase()}</div>
+    </div>
+    <div class="opt-km">
+      <div class="opt-km-val ${ivCls}">${d.atm_iv}%</div>
+      <div class="opt-km-lbl">ATM IV &nbsp;<span style="font-size:.6rem;opacity:.6">IVR ${d.iv_rank}%</span></div>
+      <div class="opt-km-hint">${d.iv_signal.replace('_',' ').toUpperCase()}</div>
+    </div>
+    <div class="opt-km">
+      <div class="opt-km-val ${mpCls}">$${d.max_pain}</div>
+      <div class="opt-km-lbl">Max Pain</div>
+      <div class="opt-km-hint ${mpCls}">${d.mp_dist > 0 ? '+' : ''}${d.mp_dist}% from price</div>
+    </div>
+  </div>
+
+  <!-- Interpret P/C -->
+  <div class="opt-interpret">${pcrInterpret} &nbsp;·&nbsp; ${ivInterpret}</div>
+
+  <!-- Volume / OI summary row -->
+  <div class="opt-vol-row">
+    <div class="opt-vr"><span class="opt-vr-lbl">Call Vol</span><span class="opt-vr-val bull">${_fmtV(d.call_vol)}</span></div>
+    <div class="opt-vr"><span class="opt-vr-lbl">Put Vol</span><span class="opt-vr-val bear">${_fmtV(d.put_vol)}</span></div>
+    <div class="opt-vr"><span class="opt-vr-lbl">Call OI</span><span class="opt-vr-val bull">${_fmtV(d.call_oi)}</span></div>
+    <div class="opt-vr"><span class="opt-vr-lbl">Put OI</span><span class="opt-vr-val bear">${_fmtV(d.put_oi)}</span></div>
+  </div>
+
+  ${uoaHTML}
+  ${oiHTML}
+
+</div>`;
+}
+
+async function toggleOptions(symbol, price) {
+  const content = document.getElementById(`options_${symbol}`);
+  const btn     = document.getElementById(`options_btn_${symbol}`);
+  if (!content) return;
+
+  if (content.style.display !== 'none') {
+    content.style.display = 'none';
+    if (btn) btn.textContent = '📈 Options Activity ▾';
+    return;
+  }
+  content.style.display = 'block';
+  if (btn) btn.textContent = '📈 Options Activity ▴';
+  if (content.dataset.loaded) return;
+
+  content.innerHTML = '<div class="ag-loading"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>Loading options data…</div>';
+  try {
+    const res = await fetch('/api/options', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ symbol, price }),
+    });
+    const d = await res.json();
+    content.dataset.loaded = '1';
+    content.innerHTML = _buildOptionsPanel(d, price);
+  } catch(e) {
+    content.innerHTML = '<div class="opt-nodata">Failed to load options data</div>';
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
