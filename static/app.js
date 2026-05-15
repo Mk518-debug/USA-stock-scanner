@@ -13,7 +13,7 @@ function fitScrollZones() {
   const stickyH = sticky  ? sticky.offsetHeight  : 0;
   const scrollH = Math.max(100, winH - headerH - stickyH);
 
-  ['cardsArea','newsArea','reportArea','screenArea'].forEach(id => {
+  ['cardsArea','newsArea','optionsScanArea','reportArea','screenArea'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.height = scrollH + 'px';
   });
@@ -217,13 +217,22 @@ document.querySelectorAll('.ftab').forEach(tab => {
     tab.classList.add('active'); tab.setAttribute('aria-selected','true');
     activeTab = tab.dataset.tab;
     currentPage = 0;
+    const cardsEl   = document.getElementById('cardsArea');
+    const newsEl    = document.getElementById('newsArea');
+    const optEl     = document.getElementById('optionsScanArea');
+    const accEl     = document.getElementById('accuracyReport');
+
+    // Hide all panels
+    [cardsEl, newsEl, optEl].forEach(el => { if (el) el.style.display = 'none'; });
+
     if (activeTab === 'news') {
-      document.getElementById('cardsArea').style.display = 'none';
-      document.getElementById('newsArea').style.display  = '';
+      if (newsEl) newsEl.style.display = '';
       fetchNews();
+    } else if (activeTab === 'optionsscan') {
+      if (optEl) optEl.style.display = '';
+      if (accEl) accEl.style.display = 'none';
     } else {
-      document.getElementById('newsArea').style.display  = 'none';
-      document.getElementById('cardsArea').style.display = '';
+      if (cardsEl) cardsEl.style.display = '';
       render();
     }
   });
@@ -1119,7 +1128,162 @@ function _buildTvRecGauge(rec, source) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  OPTIONS ACTIVITY
+//  OPTIONS SCANNER  (dedicated tab)
+// ══════════════════════════════════════════════════════════════════════════
+let optScanData    = [];   // accumulated results
+let optScanRunning = false;
+
+async function startOptionsScan() {
+  if (optScanRunning) return;
+
+  const count = parseInt(document.getElementById('optScanCount')?.value || 10);
+  const stocks = allResults.slice(0, count);
+
+  if (!stocks.length) {
+    document.getElementById('optEmptyState').style.display = 'block';
+    document.getElementById('optTableWrap').style.display  = 'none';
+    document.getElementById('optScanSub').textContent = 'Run the main scan first';
+    return;
+  }
+
+  optScanData    = [];
+  optScanRunning = true;
+
+  const btn = document.getElementById('optScanBtn');
+  const txt = document.getElementById('optScanBtnTxt');
+  if (btn) btn.disabled = true;
+  if (txt) txt.textContent = '⏳ Scanning…';
+
+  document.getElementById('optEmptyState').style.display  = 'none';
+  document.getElementById('optTableWrap').style.display   = 'block';
+  document.getElementById('optTableBody').innerHTML       = '';
+  document.getElementById('optProgress').style.display    = 'flex';
+  document.getElementById('optProgFill').style.width      = '0%';
+  document.getElementById('optProgText').textContent      = `Scanning 0 / ${stocks.length}…`;
+  document.getElementById('optScanSub').textContent       = `Scanning ${stocks.length} stocks…`;
+
+  for (let i = 0; i < stocks.length; i++) {
+    const r = stocks[i];
+    document.getElementById('optProgText').textContent  = `Scanning ${i+1} / ${stocks.length} — ${r.symbol}`;
+    document.getElementById('optProgFill').style.width  = `${Math.round((i+1)/stocks.length*100)}%`;
+
+    try {
+      const res = await fetch('/api/options', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ symbol: r.symbol, price: r.price }),
+      });
+      const d = await res.json();
+      if (!d.rate_limited && !d.error) {
+        d._scan = r;   // attach original scan result for context
+        optScanData.push(d);
+        _appendOptRow(d);
+      } else if (d.rate_limited) {
+        // wait and retry once
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        const res2 = await fetch('/api/options', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ symbol: r.symbol, price: r.price }),
+        });
+        const d2 = await res2.json();
+        if (!d2.rate_limited && !d2.error) {
+          d2._scan = r;
+          optScanData.push(d2);
+          _appendOptRow(d2);
+        }
+      }
+    } catch(e) { /* skip */ }
+  }
+
+  document.getElementById('optProgress').style.display = 'none';
+  document.getElementById('optScanSub').textContent    = `${optScanData.length} stocks scanned`;
+  if (btn) btn.disabled = false;
+  if (txt) txt.textContent = '🔄 Re-scan';
+  optScanRunning = false;
+
+  renderOptTable();  // apply filter + sort on completed data
+}
+
+function _optRowHTML(d) {
+  const scan     = d._scan || {};
+  const dc       = scan.direction === 'Bullish' ? 'bull' : scan.direction === 'Bearish' ? 'bear' : '';
+  const sigCls   = d.opt_signal === 'bullish' ? 'bull' : d.opt_signal === 'bearish' ? 'bear' : '';
+  const sigLbl   = d.opt_signal === 'bullish' ? '▲ Bullish' : d.opt_signal === 'bearish' ? '▼ Bearish' : '● Neutral';
+  const pcrCls   = d.pcr_signal === 'bullish' ? 'bull' : d.pcr_signal === 'bearish' ? 'bear' : '';
+  const ivCls    = d.iv_signal === 'high' || d.iv_signal === 'very_high' ? 'bear'
+                 : d.iv_signal === 'low' ? 'bull' : '';
+  const mpCls    = d.mp_dist > 0 ? 'bull' : d.mp_dist < 0 ? 'bear' : '';
+  const tvLink   = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(scan.tv_symbol||d.symbol)}`;
+
+  // Top UOA entry
+  const topUoa = [...(d.uoa_calls||[]), ...(d.uoa_puts||[])].sort((a,b) => b.vol_oi - a.vol_oi)[0];
+  const uoaCell = topUoa
+    ? `<span class="opt-uoa-chip ${topUoa.type==='call'?'call-tag':'put-tag'}">${topUoa.type.toUpperCase()}</span>
+       <span class="${topUoa.vol_oi>=5?'fire-ratio':''}" style="font-weight:700">${topUoa.vol_oi}×</span>
+       <span style="opacity:.65;font-size:.7rem"> $${topUoa.strike}</span>`
+    : '<span style="opacity:.4">—</span>';
+
+  return `<tr class="opt-tr ${sigCls}" id="otr_${d.symbol}">
+    <td class="opt-td-sym">
+      <span class="opt-tr-sym ${dc}">${d.symbol}</span>
+      <a href="${tvLink}" target="_blank" rel="noopener" class="opt-tr-chart">📊</a>
+    </td>
+    <td><span class="opt-sig-badge ${sigCls}" style="font-size:.68rem;padding:2px 8px">${sigLbl}</span></td>
+    <td class="${pcrCls}" style="font-weight:700">${d.pcr_vol}
+      <div class="opt-td-sub ${pcrCls}">${d.pcr_signal}</div></td>
+    <td class="${ivCls}" style="font-weight:700">${d.atm_iv}%
+      <div class="opt-td-sub">IVR ${d.iv_rank}%</div></td>
+    <td>${d.iv_rank}%</td>
+    <td class="${mpCls}" style="font-weight:700">$${d.max_pain}
+      <div class="opt-td-sub ${mpCls}">${d.mp_dist>0?'+':''}${d.mp_dist}%</div></td>
+    <td class="opt-td-uoa">${uoaCell}</td>
+    <td class="bull" style="font-weight:700">${_fmtV(d.call_vol)}</td>
+    <td class="bear" style="font-weight:700">${_fmtV(d.put_vol)}</td>
+    <td style="opacity:.65">${d.dte}d</td>
+  </tr>`;
+}
+
+function _appendOptRow(d) {
+  const tbody = document.getElementById('optTableBody');
+  if (!tbody) return;
+  const tr = document.createElement('tbody');
+  tr.innerHTML = _optRowHTML(d);
+  tbody.appendChild(tr.firstElementChild);
+}
+
+function renderOptTable() {
+  const sig    = document.getElementById('optFilterSig')?.value || 'all';
+  const sortBy = document.getElementById('optSortBy')?.value    || 'uoa';
+
+  let list = [...optScanData];
+
+  // Filter
+  switch (sig) {
+    case 'bullish':  list = list.filter(d => d.opt_signal === 'bullish'); break;
+    case 'bearish':  list = list.filter(d => d.opt_signal === 'bearish'); break;
+    case 'uoa':      list = list.filter(d => {
+      const top = [...(d.uoa_calls||[]),...(d.uoa_puts||[])].sort((a,b)=>b.vol_oi-a.vol_oi)[0];
+      return top && top.vol_oi >= 5;
+    }); break;
+    case 'iv_high':  list = list.filter(d => d.atm_iv >= 50); break;
+    case 'low_pcr':  list = list.filter(d => d.pcr_vol < 0.5); break;
+  }
+
+  // Sort
+  const sortFn = {
+    uoa:      d => { const t=[...(d.uoa_calls||[]),...(d.uoa_puts||[])].sort((a,b)=>b.vol_oi-a.vol_oi)[0]; return -(t?.vol_oi||0); },
+    pcr_vol:  d => d.pcr_vol,
+    atm_iv:   d => -d.atm_iv,
+    call_vol: d => -d.call_vol,
+    mp_dist:  d => Math.abs(d.mp_dist),
+  };
+  list.sort(sortFn[sortBy] || (() => 0));
+
+  const tbody = document.getElementById('optTableBody');
+  if (tbody) tbody.innerHTML = list.map(_optRowHTML).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  OPTIONS ACTIVITY  (per-card section)
 // ══════════════════════════════════════════════════════════════════════════
 
 function _fmtV(v) {

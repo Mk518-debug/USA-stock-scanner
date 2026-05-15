@@ -748,7 +748,73 @@ body.light .chart-modal { background: rgba(200,210,230,.85); }
 body.light .acc-panel { box-shadow: 0 1px 6px rgba(0,0,0,.07); }
 
 /* ════════════════════════════════════════════════════════
-   Options Activity Panel
+   Options Scanner Tab  (full section)
+════════════════════════════════════════════════════════ */
+#optionsScanArea  { display: flex; flex-direction: column; overflow: hidden; height: 100%; }
+
+/* Controls bar */
+.opt-scan-bar     { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px 16px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.opt-scan-left    { display: flex; flex-direction: column; gap: 2px; }
+.opt-scan-title   { font-size: 0.9rem; font-weight: 800; color: var(--text); }
+.opt-scan-sub     { font-size: 0.7rem; color: var(--text3); }
+.opt-scan-right   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Scan button */
+.scan-btn-options { background: linear-gradient(135deg,#1a56a0,#0d3d7a); color:#fff; border:none; border-radius:var(--r-sm); padding:8px 16px; font-size:0.82rem; font-weight:800; cursor:pointer; white-space:nowrap; transition:all .2s; }
+.scan-btn-options:hover    { opacity:.88; transform:translateY(-1px); }
+.scan-btn-options:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+body.light .scan-btn-options { background: linear-gradient(135deg,#1565c0,#0d47a1); }
+
+/* Tab style */
+.ftab-options { border-color: rgba(68,138,255,.3) !important; }
+.ftab-options.active { background: rgba(68,138,255,.12) !important; border-color: var(--blue) !important; color: var(--blue) !important; }
+
+/* Progress bar */
+.opt-prog-wrap    { display: flex; flex-direction: column; gap: 6px; padding: 10px 16px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.opt-prog-track   { height: 4px; background: var(--border2); border-radius: 2px; overflow: hidden; }
+.opt-prog-fill    { height: 100%; background: var(--blue); border-radius: 2px; transition: width .4s ease; width: 0%; }
+.opt-prog-text    { font-size: 0.72rem; color: var(--text3); }
+
+/* Results area */
+.opt-results-area { flex: 1; overflow-y: auto; overflow-x: auto; }
+
+/* Empty state */
+.opt-empty        { text-align: center; padding: 60px 20px; }
+.opt-empty-icon   { font-size: 3rem; margin-bottom: 14px; }
+.opt-empty-title  { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.opt-empty-desc   { font-size: 0.85rem; color: var(--text2); margin-bottom: 8px; }
+.opt-empty-note   { font-size: 0.72rem; color: var(--blue); background: rgba(68,138,255,.08); border: 1px solid rgba(68,138,255,.2); padding: 5px 14px; border-radius: 20px; display: inline-block; }
+
+/* Table */
+.opt-scan-table   { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 700px; }
+.opt-scan-table thead tr { background: var(--bg3); border-bottom: 2px solid var(--border2); position: sticky; top: 0; z-index: 10; }
+.opt-scan-table thead th { padding: 10px 12px; text-align: left; font-size: 0.67rem; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; white-space: nowrap; }
+.opt-scan-table tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+.opt-scan-table tbody tr:hover { background: var(--bg3); }
+.opt-scan-table tbody tr.bull { border-left: 3px solid var(--green); }
+.opt-scan-table tbody tr.bear { border-left: 3px solid var(--red); }
+.opt-scan-table td            { padding: 10px 12px; vertical-align: middle; }
+
+/* Cells */
+.opt-td-sym       { white-space: nowrap; }
+.opt-tr-sym       { font-size: 0.9rem; font-weight: 900; margin-right: 4px; }
+.opt-tr-sym.bull  { color: var(--green); }
+.opt-tr-sym.bear  { color: var(--red); }
+.opt-tr-sym       { color: var(--text); }
+.opt-tr-chart     { font-size: 0.75rem; opacity: .6; text-decoration: none; transition: opacity .15s; }
+.opt-tr-chart:hover { opacity: 1; }
+.opt-td-sub       { font-size: 0.62rem; opacity: .75; margin-top: 2px; font-weight: 400; }
+.opt-td-sub.bull  { color: var(--green); }
+.opt-td-sub.bear  { color: var(--red); }
+.opt-td-uoa       { white-space: nowrap; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+/* Light mode */
+body.light .opt-scan-bar   { background: #faf8f5; }
+body.light .opt-scan-table thead tr { background: #ede9e3; }
+body.light .opt-scan-table tbody tr:hover { background: #ede9e3; }
+
+/* ════════════════════════════════════════════════════════
+   Options Activity Panel  (per-card)
 ════════════════════════════════════════════════════════ */
 .opt-wrap       { display: flex; flex-direction: column; gap: 0; }
 .opt-nodata     { text-align: center; padding: 14px 0; font-size: 0.78rem; color: var(--text3); }

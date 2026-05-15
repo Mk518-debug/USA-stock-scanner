@@ -88,7 +88,8 @@
           <button class="ftab" data-tab="s80"            role="tab" aria-selected="false">🔥 80+</button>
           <button class="ftab" data-tab="strong"         role="tab" aria-selected="false">⚡ Strong Buy</button>
           <button class="ftab" data-tab="open"           role="tab" aria-selected="false">📌 Watching</button>
-          <button class="ftab ftab-news" data-tab="news" role="tab" aria-selected="false">📰 News</button>
+          <button class="ftab ftab-news"    data-tab="news"       role="tab" aria-selected="false">📰 News</button>
+          <button class="ftab ftab-options" data-tab="optionsscan" role="tab" aria-selected="false">📊 Options</button>
         </div>
         <div class="filter-right">
           <input id="cardSearch" class="card-search" type="text" placeholder="🔍 Search stocks…"
@@ -160,6 +161,79 @@
       </div>
       <div id="newsFeed"></div>
     </div>
+
+    <!-- ══ OPTIONS SCANNER ══ -->
+    <div id="optionsScanArea" style="display:none">
+
+      <!-- Sticky controls bar -->
+      <div class="opt-scan-bar">
+        <div class="opt-scan-left">
+          <span class="opt-scan-title">📊 Options Scanner</span>
+          <span class="opt-scan-sub" id="optScanSub">Scan top results for options signals</span>
+        </div>
+        <div class="opt-scan-right">
+          <select id="optScanCount" class="ctrl-select sm-sel" aria-label="Number of stocks to scan">
+            <option value="5">Top 5</option>
+            <option value="10" selected>Top 10</option>
+            <option value="20">Top 20</option>
+          </select>
+          <select id="optFilterSig" class="ctrl-select sm-sel" aria-label="Signal filter" onchange="renderOptTable()">
+            <option value="all">All Signals</option>
+            <option value="bullish">Bullish Only</option>
+            <option value="bearish">Bearish Only</option>
+            <option value="uoa">High UOA (5×+)</option>
+            <option value="iv_high">High IV (50%+)</option>
+            <option value="low_pcr">Low P/C (&lt;0.5)</option>
+          </select>
+          <select id="optSortBy" class="ctrl-select sm-sel" aria-label="Sort by" onchange="renderOptTable()">
+            <option value="uoa">Sort: UOA ↓</option>
+            <option value="pcr_vol">Sort: P/C Ratio</option>
+            <option value="atm_iv">Sort: IV% ↓</option>
+            <option value="call_vol">Sort: Call Vol ↓</option>
+            <option value="mp_dist">Sort: Max Pain Dist</option>
+          </select>
+          <button id="optScanBtn" class="scan-btn-options" onclick="startOptionsScan()" aria-label="Start options scan">
+            <span id="optScanBtnTxt">📊 SCAN OPTIONS</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div id="optProgress" class="opt-prog-wrap" style="display:none">
+        <div class="opt-prog-track"><div class="opt-prog-fill" id="optProgFill"></div></div>
+        <div class="opt-prog-text" id="optProgText">Initializing…</div>
+      </div>
+
+      <!-- Results area -->
+      <div class="opt-results-area" id="optResultsArea">
+        <div class="opt-empty" id="optEmptyState">
+          <div class="opt-empty-icon">📊</div>
+          <div class="opt-empty-title">Options Scanner</div>
+          <div class="opt-empty-desc">Run the main stock scan first, then click <strong>SCAN OPTIONS</strong></div>
+          <div class="opt-empty-note">⏱ ~3–5 sec per stock &nbsp;·&nbsp; max 20 stocks &nbsp;·&nbsp; results stream in live</div>
+        </div>
+        <div id="optTableWrap" style="display:none">
+          <table class="opt-scan-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Signal</th>
+                <th>P/C Ratio</th>
+                <th>ATM IV</th>
+                <th>IVR%</th>
+                <th>Max Pain</th>
+                <th>Top UOA</th>
+                <th>Call Vol</th>
+                <th>Put Vol</th>
+                <th>DTE</th>
+              </tr>
+            </thead>
+            <tbody id="optTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- end #optionsScanArea -->
 
   </div><!-- end .main-content -->
 
