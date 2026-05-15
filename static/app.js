@@ -13,7 +13,7 @@ function fitScrollZones() {
   const stickyH = sticky  ? sticky.offsetHeight  : 0;
   const scrollH = Math.max(100, winH - headerH - stickyH);
 
-  ['cardsArea','newsArea','optionsScanArea','reportArea','screenArea'].forEach(id => {
+  ['cardsArea','newsArea','reportArea','screenArea'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.height = scrollH + 'px';
   });
@@ -219,18 +219,14 @@ document.querySelectorAll('.ftab').forEach(tab => {
     currentPage = 0;
     const scannerEl = document.getElementById('scannerPanel');
     const newsEl    = document.getElementById('newsArea');
-    const optEl     = document.getElementById('optionsScanArea');
 
     // Hide all top-level content panels
     if (scannerEl) scannerEl.style.display = 'none';
     if (newsEl)    newsEl.style.display    = 'none';
-    if (optEl)     optEl.style.display     = 'none';
 
     if (activeTab === 'news') {
       if (newsEl) newsEl.style.display = '';
       fetchNews();
-    } else if (activeTab === 'optionsscan') {
-      if (optEl) optEl.style.display = '';
     } else {
       if (scannerEl) scannerEl.style.display = '';
       render();
@@ -304,8 +300,6 @@ async function startScan(force = false) {
     if (sp) sp.style.display = '';
     const na = document.getElementById('newsArea');
     if (na) na.style.display = 'none';
-    const oa = document.getElementById('optionsScanArea');
-    if (oa) oa.style.display = 'none';
     document.querySelectorAll('.ftab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
     document.querySelector('.ftab[data-tab="all"]').classList.add('active');
     activeTab = 'all';
@@ -1120,154 +1114,6 @@ function _buildTvRecGauge(rec, source) {
   <div class="ag-label" style="color:${labelColor}">${label}</div>
   <div class="ag-sub" style="margin-top:8px">Score: ${(rec*100).toFixed(0)} / 100</div>
 </div>`;
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-//  OPTIONS SCANNER  (dedicated tab)
-// ══════════════════════════════════════════════════════════════════════════
-let optScanData    = [];   // accumulated results
-let optScanRunning = false;
-
-function startOptionsScan() {
-  const count  = parseInt(document.getElementById('optScanCount')?.value || 10);
-  const stocks = allResults.slice(0, count);
-
-  if (!stocks.length) {
-    document.getElementById('optEmptyState').style.display = 'block';
-    document.getElementById('optTableWrap').style.display  = 'none';
-    document.getElementById('optScanSub').textContent      = 'Run the main scan first';
-    return;
-  }
-
-  // Build options metrics from scan data already in memory — no extra API calls
-  optScanData = stocks.map(r => {
-    const pcr      = r.put_call_ratio || 0;
-    const vol      = r.volatility_d   || 0;   // annualised IV proxy
-    const vr       = r.vol_ratio      || 1;
-
-    const pcrSig   = pcr > 0 ? (pcr < 0.5 ? 'bullish' : pcr > 1.2 ? 'bearish' : 'neutral')
-                              : (r.direction === 'Bullish' ? 'bullish'
-                                 : r.direction === 'Bearish' ? 'bearish' : 'neutral');
-    const ivSig    = vol > 80 ? 'very_high' : vol > 50 ? 'high'
-                   : vol > 35 ? 'elevated'  : vol > 15 ? 'normal' : 'low';
-
-    // Approximate UOA from volume spike — high vol_ratio = unusual activity
-    const uoaCalls = vr >= 1.5
-      ? [{ type:'call', strike:'—', volume: r.volume||0, oi: 0,
-           vol_oi: Math.round(vr * 10) / 10, iv: vol, otm: true }]
-      : [];
-
-    let score = 0;
-    if (pcrSig === 'bullish')             score += 2;
-    else if (pcrSig === 'bearish')        score -= 2;
-    if (r.direction === 'Bullish')        score += 1;
-    else if (r.direction === 'Bearish')   score -= 1;
-    if (vr >= 1.5)                        score += 1;
-
-    return {
-      symbol:      r.symbol,
-      expiry:      '—',
-      dte:         '—',
-      call_vol:    r.volume || 0,
-      put_vol:     pcr > 0 ? Math.round((r.volume||0) * pcr) : 0,
-      call_oi:     0, put_oi: 0,
-      pcr_vol:     pcr || '—',
-      pcr_signal:  pcrSig,
-      atm_iv:      vol || '—',
-      iv_rank:     50,
-      iv_signal:   ivSig,
-      max_pain:    null, mp_dist: 0,
-      uoa_calls:   uoaCalls, uoa_puts: [],
-      oi_dist:     [],
-      opt_signal:  score >= 2 ? 'bullish' : score <= -2 ? 'bearish' : 'neutral',
-      _scan:       r,
-    };
-  });
-
-  document.getElementById('optEmptyState').style.display = 'none';
-  document.getElementById('optTableWrap').style.display  = 'block';
-  document.getElementById('optProgress').style.display   = 'none';
-  document.getElementById('optScanSub').textContent      = `${optScanData.length} stocks · data from scan`;
-
-  renderOptTable();
-}
-
-function _optRowHTML(d) {
-  const scan   = d._scan || {};
-  const dc     = scan.direction === 'Bullish' ? 'bull' : scan.direction === 'Bearish' ? 'bear' : '';
-  const sigCls = d.opt_signal === 'bullish' ? 'bull' : d.opt_signal === 'bearish' ? 'bear' : '';
-  const sigLbl = d.opt_signal === 'bullish' ? '▲ Bullish' : d.opt_signal === 'bearish' ? '▼ Bearish' : '● Neutral';
-  const pcrCls = d.pcr_signal === 'bullish' ? 'bull' : d.pcr_signal === 'bearish' ? 'bear' : '';
-  const ivCls  = ['high','very_high','elevated'].includes(d.iv_signal) ? 'bear'
-               : d.iv_signal === 'low' ? 'bull' : '';
-  const tvLink = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(scan.tv_symbol||d.symbol)}`;
-
-  const vr       = scan.vol_ratio || 1;
-  const vrCls    = vr >= 2.0 ? 'fire-ratio' : vr >= 1.5 ? 'bull' : '';
-  const vrLbl    = vr >= 2.0 ? `${vr}× 🔥` : vr >= 1.5 ? `${vr}×` : `${vr}×`;
-  const pcrDisp  = d.pcr_vol > 0 ? d.pcr_vol : '—';
-  const ivDisp   = d.atm_iv  > 0 ? d.atm_iv + '%' : '—';
-
-  return `<tr class="opt-tr ${sigCls}" id="otr_${d.symbol}">
-    <td class="opt-td-sym">
-      <span class="opt-tr-sym ${dc}">${d.symbol}</span>
-      <span style="font-size:.68rem;color:var(--text3)">${scan.name||''}</span>
-      <a href="${tvLink}" target="_blank" rel="noopener" class="opt-tr-chart">📊</a>
-    </td>
-    <td><span class="opt-sig-badge ${sigCls}">${sigLbl}</span></td>
-    <td class="${pcrCls}" style="font-weight:700">${pcrDisp}
-      <div class="opt-td-sub ${pcrCls}">${d.pcr_signal}</div></td>
-    <td class="${ivCls}" style="font-weight:700">${ivDisp}
-      <div class="opt-td-sub">${d.iv_signal?.replace('_',' ')}</div></td>
-    <td class="${vrCls}" style="font-weight:700">${vrLbl}
-      <div class="opt-td-sub">vol spike</div></td>
-    <td style="font-weight:700">${scan.score || '—'}
-      <div class="opt-td-sub">${scan.direction||''}</div></td>
-    <td style="font-weight:700">${scan.rsi || '—'}
-      <div class="opt-td-sub">RSI</div></td>
-    <td style="font-weight:700">${scan.adx || '—'}
-      <div class="opt-td-sub">ADX</div></td>
-  </tr>`;
-}
-
-function _appendOptRow(d) {
-  const tbody = document.getElementById('optTableBody');
-  if (!tbody) return;
-  const tr = document.createElement('tbody');
-  tr.innerHTML = _optRowHTML(d);
-  tbody.appendChild(tr.firstElementChild);
-}
-
-function renderOptTable() {
-  const sig    = document.getElementById('optFilterSig')?.value || 'all';
-  const sortBy = document.getElementById('optSortBy')?.value    || 'uoa';
-
-  let list = [...optScanData];
-
-  // Filter
-  switch (sig) {
-    case 'bullish':  list = list.filter(d => d.opt_signal === 'bullish'); break;
-    case 'bearish':  list = list.filter(d => d.opt_signal === 'bearish'); break;
-    case 'uoa':      list = list.filter(d => {
-      const top = [...(d.uoa_calls||[]),...(d.uoa_puts||[])].sort((a,b)=>b.vol_oi-a.vol_oi)[0];
-      return top && top.vol_oi >= 5;
-    }); break;
-    case 'iv_high':  list = list.filter(d => d.atm_iv >= 50); break;
-    case 'low_pcr':  list = list.filter(d => d.pcr_vol < 0.5); break;
-  }
-
-  // Sort
-  const sortFn = {
-    score:     d => -(d._scan?.score    || 0),
-    vol_ratio: d => -(d._scan?.vol_ratio || 0),
-    pcr_vol:   d => d.pcr_vol || 99,
-    atm_iv:    d => -(d.atm_iv || 0),
-    rsi:       d => -(d._scan?.rsi || 0),
-  };
-  list.sort(sortFn[sortBy] || (() => 0));
-
-  const tbody = document.getElementById('optTableBody');
-  if (tbody) tbody.innerHTML = list.map(_optRowHTML).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════════════
