@@ -186,11 +186,11 @@
             <option value="low_pcr">Low P/C (&lt;0.5)</option>
           </select>
           <select id="optSortBy" class="ctrl-select sm-sel" aria-label="Sort by" onchange="renderOptTable()">
-            <option value="uoa">Sort: UOA ↓</option>
+            <option value="score">Sort: Score ↓</option>
+            <option value="vol_ratio">Sort: Vol Spike ↓</option>
             <option value="pcr_vol">Sort: P/C Ratio</option>
             <option value="atm_iv">Sort: IV% ↓</option>
-            <option value="call_vol">Sort: Call Vol ↓</option>
-            <option value="mp_dist">Sort: Max Pain Dist</option>
+            <option value="rsi">Sort: RSI ↓</option>
           </select>
           <button id="optScanBtn" class="scan-btn-options" onclick="startOptionsScan()" aria-label="Start options scan">
             <span id="optScanBtnTxt">📊 SCAN OPTIONS</span>
@@ -217,13 +217,13 @@
             <thead>
               <tr>
                 <th>Symbol</th>
-                <th>Signal</th>
+                <th>Options Signal</th>
                 <th>P/C Ratio</th>
-                <th>ATM IV</th>
-                <th>Top UOA</th>
-                <th>Call Vol</th>
-                <th>Put Vol</th>
-                <th>DTE</th>
+                <th>IV%</th>
+                <th>Vol Spike</th>
+                <th>Score</th>
+                <th>RSI</th>
+                <th>ADX</th>
               </tr>
             </thead>
             <tbody id="optTableBody"></tbody>

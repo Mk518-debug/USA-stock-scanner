@@ -642,6 +642,9 @@ def analyze(symbol, timeframe='1d'):
             'rs_20':         rs_20,
             'support':       support,
             'resistance':    resistance,
+            # ATR-based annualised volatility proxy  (ATR/price × 100 × √252)
+            'volatility_d':  round((atr / max(c, 0.01)) * 100 * 15.87, 1),
+            'put_call_ratio': 0.0,  # not available from yfinance scanner path
             'last_candle':   last_candle,
         }
     except Exception as e:

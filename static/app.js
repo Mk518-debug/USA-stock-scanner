@@ -1133,108 +1133,105 @@ function _buildTvRecGauge(rec, source) {
 let optScanData    = [];   // accumulated results
 let optScanRunning = false;
 
-async function startOptionsScan() {
-  if (optScanRunning) return;
-
-  const count = parseInt(document.getElementById('optScanCount')?.value || 10);
+function startOptionsScan() {
+  const count  = parseInt(document.getElementById('optScanCount')?.value || 10);
   const stocks = allResults.slice(0, count);
 
   if (!stocks.length) {
     document.getElementById('optEmptyState').style.display = 'block';
     document.getElementById('optTableWrap').style.display  = 'none';
-    document.getElementById('optScanSub').textContent = 'Run the main scan first';
+    document.getElementById('optScanSub').textContent      = 'Run the main scan first';
     return;
   }
 
-  optScanData    = [];
-  optScanRunning = true;
+  // Build options metrics from scan data already in memory — no extra API calls
+  optScanData = stocks.map(r => {
+    const pcr      = r.put_call_ratio || 0;
+    const vol      = r.volatility_d   || 0;   // annualised IV proxy
+    const vr       = r.vol_ratio      || 1;
 
-  const btn = document.getElementById('optScanBtn');
-  const txt = document.getElementById('optScanBtnTxt');
-  if (btn) btn.disabled = true;
-  if (txt) txt.textContent = '⏳ Scanning…';
+    const pcrSig   = pcr > 0 ? (pcr < 0.5 ? 'bullish' : pcr > 1.2 ? 'bearish' : 'neutral')
+                              : (r.direction === 'Bullish' ? 'bullish'
+                                 : r.direction === 'Bearish' ? 'bearish' : 'neutral');
+    const ivSig    = vol > 80 ? 'very_high' : vol > 50 ? 'high'
+                   : vol > 35 ? 'elevated'  : vol > 15 ? 'normal' : 'low';
 
-  document.getElementById('optEmptyState').style.display  = 'none';
-  document.getElementById('optTableWrap').style.display   = 'block';
-  document.getElementById('optTableBody').innerHTML       = '';
-  document.getElementById('optProgress').style.display    = 'flex';
-  document.getElementById('optProgFill').style.width      = '0%';
-  document.getElementById('optProgText').textContent      = `Scanning 0 / ${stocks.length}…`;
-  document.getElementById('optScanSub').textContent       = `Scanning ${stocks.length} stocks…`;
+    // Approximate UOA from volume spike — high vol_ratio = unusual activity
+    const uoaCalls = vr >= 1.5
+      ? [{ type:'call', strike:'—', volume: r.volume||0, oi: 0,
+           vol_oi: Math.round(vr * 10) / 10, iv: vol, otm: true }]
+      : [];
 
-  for (let i = 0; i < stocks.length; i++) {
-    const r = stocks[i];
-    document.getElementById('optProgText').textContent  = `Scanning ${i+1} / ${stocks.length} — ${r.symbol}`;
-    document.getElementById('optProgFill').style.width  = `${Math.round((i+1)/stocks.length*100)}%`;
+    let score = 0;
+    if (pcrSig === 'bullish')             score += 2;
+    else if (pcrSig === 'bearish')        score -= 2;
+    if (r.direction === 'Bullish')        score += 1;
+    else if (r.direction === 'Bearish')   score -= 1;
+    if (vr >= 1.5)                        score += 1;
 
-    try {
-      const res = await fetch('/api/options_fast', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ symbol: r.symbol, price: r.price }),
-      });
-      const d = await res.json();
-      if (!d.rate_limited && !d.error) {
-        d._scan = r;
-        optScanData.push(d);
-        _appendOptRow(d);
-      } else if (d.rate_limited) {
-        await new Promise(resolve => setTimeout(resolve, 4000));
-        const res2 = await fetch('/api/options_fast', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ symbol: r.symbol, price: r.price }),
-        });
-        const d2 = await res2.json();
-        if (!d2.rate_limited && !d2.error) {
-          d2._scan = r;
-          optScanData.push(d2);
-          _appendOptRow(d2);
-        }
-      }
-    } catch(e) { /* skip */ }
-  }
+    return {
+      symbol:      r.symbol,
+      expiry:      '—',
+      dte:         '—',
+      call_vol:    r.volume || 0,
+      put_vol:     pcr > 0 ? Math.round((r.volume||0) * pcr) : 0,
+      call_oi:     0, put_oi: 0,
+      pcr_vol:     pcr || '—',
+      pcr_signal:  pcrSig,
+      atm_iv:      vol || '—',
+      iv_rank:     50,
+      iv_signal:   ivSig,
+      max_pain:    null, mp_dist: 0,
+      uoa_calls:   uoaCalls, uoa_puts: [],
+      oi_dist:     [],
+      opt_signal:  score >= 2 ? 'bullish' : score <= -2 ? 'bearish' : 'neutral',
+      _scan:       r,
+    };
+  });
 
-  document.getElementById('optProgress').style.display = 'none';
-  document.getElementById('optScanSub').textContent    = `${optScanData.length} stocks scanned`;
-  if (btn) btn.disabled = false;
-  if (txt) txt.textContent = '🔄 Re-scan';
-  optScanRunning = false;
+  document.getElementById('optEmptyState').style.display = 'none';
+  document.getElementById('optTableWrap').style.display  = 'block';
+  document.getElementById('optProgress').style.display   = 'none';
+  document.getElementById('optScanSub').textContent      = `${optScanData.length} stocks · data from scan`;
 
-  renderOptTable();  // apply filter + sort on completed data
+  renderOptTable();
 }
 
 function _optRowHTML(d) {
-  const scan     = d._scan || {};
-  const dc       = scan.direction === 'Bullish' ? 'bull' : scan.direction === 'Bearish' ? 'bear' : '';
-  const sigCls   = d.opt_signal === 'bullish' ? 'bull' : d.opt_signal === 'bearish' ? 'bear' : '';
-  const sigLbl   = d.opt_signal === 'bullish' ? '▲ Bullish' : d.opt_signal === 'bearish' ? '▼ Bearish' : '● Neutral';
-  const pcrCls   = d.pcr_signal === 'bullish' ? 'bull' : d.pcr_signal === 'bearish' ? 'bear' : '';
-  const ivCls    = d.iv_signal === 'high' || d.iv_signal === 'very_high' ? 'bear'
-                 : d.iv_signal === 'low' ? 'bull' : '';
-  const mpCls    = d.mp_dist > 0 ? 'bull' : d.mp_dist < 0 ? 'bear' : '';
-  const tvLink   = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(scan.tv_symbol||d.symbol)}`;
+  const scan   = d._scan || {};
+  const dc     = scan.direction === 'Bullish' ? 'bull' : scan.direction === 'Bearish' ? 'bear' : '';
+  const sigCls = d.opt_signal === 'bullish' ? 'bull' : d.opt_signal === 'bearish' ? 'bear' : '';
+  const sigLbl = d.opt_signal === 'bullish' ? '▲ Bullish' : d.opt_signal === 'bearish' ? '▼ Bearish' : '● Neutral';
+  const pcrCls = d.pcr_signal === 'bullish' ? 'bull' : d.pcr_signal === 'bearish' ? 'bear' : '';
+  const ivCls  = ['high','very_high','elevated'].includes(d.iv_signal) ? 'bear'
+               : d.iv_signal === 'low' ? 'bull' : '';
+  const tvLink = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(scan.tv_symbol||d.symbol)}`;
 
-  // Top UOA entry
-  const topUoa = [...(d.uoa_calls||[]), ...(d.uoa_puts||[])].sort((a,b) => b.vol_oi - a.vol_oi)[0];
-  const uoaCell = topUoa
-    ? `<span class="opt-uoa-chip ${topUoa.type==='call'?'call-tag':'put-tag'}">${topUoa.type.toUpperCase()}</span>
-       <span class="${topUoa.vol_oi>=5?'fire-ratio':''}" style="font-weight:700">${topUoa.vol_oi}×</span>
-       <span style="opacity:.65;font-size:.7rem"> $${topUoa.strike}</span>`
-    : '<span style="opacity:.4">—</span>';
+  const vr       = scan.vol_ratio || 1;
+  const vrCls    = vr >= 2.0 ? 'fire-ratio' : vr >= 1.5 ? 'bull' : '';
+  const vrLbl    = vr >= 2.0 ? `${vr}× 🔥` : vr >= 1.5 ? `${vr}×` : `${vr}×`;
+  const pcrDisp  = d.pcr_vol > 0 ? d.pcr_vol : '—';
+  const ivDisp   = d.atm_iv  > 0 ? d.atm_iv + '%' : '—';
 
   return `<tr class="opt-tr ${sigCls}" id="otr_${d.symbol}">
     <td class="opt-td-sym">
       <span class="opt-tr-sym ${dc}">${d.symbol}</span>
+      <span style="font-size:.68rem;color:var(--text3)">${scan.name||''}</span>
       <a href="${tvLink}" target="_blank" rel="noopener" class="opt-tr-chart">📊</a>
     </td>
-    <td><span class="opt-sig-badge ${sigCls}" style="font-size:.68rem;padding:2px 8px">${sigLbl}</span></td>
-    <td class="${pcrCls}" style="font-weight:700">${d.pcr_vol}
+    <td><span class="opt-sig-badge ${sigCls}">${sigLbl}</span></td>
+    <td class="${pcrCls}" style="font-weight:700">${pcrDisp}
       <div class="opt-td-sub ${pcrCls}">${d.pcr_signal}</div></td>
-    <td class="${ivCls}" style="font-weight:700">${d.atm_iv}%
+    <td class="${ivCls}" style="font-weight:700">${ivDisp}
       <div class="opt-td-sub">${d.iv_signal?.replace('_',' ')}</div></td>
-    <td class="opt-td-uoa">${uoaCell}</td>
-    <td class="bull" style="font-weight:700">${_fmtV(d.call_vol)}</td>
-    <td class="bear" style="font-weight:700">${_fmtV(d.put_vol)}</td>
-    <td style="opacity:.65">${d.dte}d</td>
+    <td class="${vrCls}" style="font-weight:700">${vrLbl}
+      <div class="opt-td-sub">vol spike</div></td>
+    <td style="font-weight:700">${scan.score || '—'}
+      <div class="opt-td-sub">${scan.direction||''}</div></td>
+    <td style="font-weight:700">${scan.rsi || '—'}
+      <div class="opt-td-sub">RSI</div></td>
+    <td style="font-weight:700">${scan.adx || '—'}
+      <div class="opt-td-sub">ADX</div></td>
   </tr>`;
 }
 
@@ -1266,11 +1263,11 @@ function renderOptTable() {
 
   // Sort
   const sortFn = {
-    uoa:      d => { const t=[...(d.uoa_calls||[]),...(d.uoa_puts||[])].sort((a,b)=>b.vol_oi-a.vol_oi)[0]; return -(t?.vol_oi||0); },
-    pcr_vol:  d => d.pcr_vol,
-    atm_iv:   d => -d.atm_iv,
-    call_vol: d => -d.call_vol,
-    mp_dist:  d => Math.abs(d.mp_dist),
+    score:     d => -(d._scan?.score    || 0),
+    vol_ratio: d => -(d._scan?.vol_ratio || 0),
+    pcr_vol:   d => d.pcr_vol || 99,
+    atm_iv:    d => -(d.atm_iv || 0),
+    rsi:       d => -(d._scan?.rsi || 0),
   };
   list.sort(sortFn[sortBy] || (() => 0));
 
