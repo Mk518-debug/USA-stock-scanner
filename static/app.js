@@ -217,27 +217,22 @@ document.querySelectorAll('.ftab').forEach(tab => {
     tab.classList.add('active'); tab.setAttribute('aria-selected','true');
     activeTab = tab.dataset.tab;
     currentPage = 0;
-    const cardsEl = document.getElementById('cardsArea');
-    const newsEl  = document.getElementById('newsArea');
-    const optEl   = document.getElementById('optionsScanArea');
-    const accEl   = document.getElementById('accuracyReport');
+    const scannerEl = document.getElementById('scannerPanel');
+    const newsEl    = document.getElementById('newsArea');
+    const optEl     = document.getElementById('optionsScanArea');
 
-    // Hide all switchable panels first
-    if (newsEl) newsEl.style.display  = 'none';
-    if (optEl)  optEl.style.display   = 'none';
+    // Hide all top-level content panels
+    if (scannerEl) scannerEl.style.display = 'none';
+    if (newsEl)    newsEl.style.display    = 'none';
+    if (optEl)     optEl.style.display     = 'none';
 
     if (activeTab === 'news') {
-      if (cardsEl) cardsEl.style.display = 'none';
-      if (accEl)   accEl.style.display   = 'none';
-      if (newsEl)  newsEl.style.display  = '';
+      if (newsEl) newsEl.style.display = '';
       fetchNews();
     } else if (activeTab === 'optionsscan') {
-      if (cardsEl) cardsEl.style.display = 'none';
-      if (accEl)   accEl.style.display   = 'none';
-      if (optEl)   optEl.style.display   = '';
+      if (optEl) optEl.style.display = '';
     } else {
-      if (cardsEl) cardsEl.style.display = '';
-      if (accEl && allResults.length)    accEl.style.display = '';
+      if (scannerEl) scannerEl.style.display = '';
       render();
     }
   });
@@ -302,13 +297,15 @@ async function startScan(force = false) {
     saveScanToHistory(data);
     checkAlerts(data.results);
 
-    document.getElementById('statsTop').style.display      = 'grid';
-    document.getElementById('filterBar').style.display     = 'flex';
-    // Always return to the cards view after a scan
-    document.getElementById('cardsArea').style.display     = '';
-    document.getElementById('newsArea').style.display      = 'none';
-    const osa = document.getElementById('optionsScanArea');
-    if (osa) osa.style.display = 'none';
+    document.getElementById('statsTop').style.display   = 'grid';
+    document.getElementById('filterBar').style.display  = 'flex';
+    // Always return to the scanner panel after a scan
+    const sp = document.getElementById('scannerPanel');
+    if (sp) sp.style.display = '';
+    const na = document.getElementById('newsArea');
+    if (na) na.style.display = 'none';
+    const oa = document.getElementById('optionsScanArea');
+    if (oa) oa.style.display = 'none';
     document.querySelectorAll('.ftab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
     document.querySelector('.ftab[data-tab="all"]').classList.add('active');
     activeTab = 'all';

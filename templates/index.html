@@ -120,7 +120,7 @@
       <!-- Accuracy Report (injected by JS after scan) -->
       <div id="accuracyReport" style="display:none; padding:12px 16px 0;"></div>
 
-      <!-- ══ CARDS ══ -->
+      <!-- ══ CARDS — the only flex child of #scannerPanel ══ -->
       <div class="cards-area" id="cardsArea">
         <div class="welcome" id="welcomeScreen">
           <div class="welcome-icon">📈</div>
@@ -138,79 +138,79 @@
         </div>
       </div>
 
-      <!-- ══ NEWS (inside scannerPanel so it shares the flex height) ══ -->
-      <div id="newsArea" style="display:none; overflow-y:auto; padding:16px">
-        <div class="news-bar" id="newsBar">
-          <div class="news-chips" id="newsChips">
-            <button class="n-chip active" data-ncat="all">All</button>
-            <button class="n-chip" data-ncat="earn">📊 Earnings</button>
-            <button class="n-chip" data-ncat="launch">🚀 Launch</button>
-            <button class="n-chip" data-ncat="upgrade">⬆ Analyst</button>
-            <button class="n-chip" data-ncat="deal">🤝 Deal</button>
-            <button class="n-chip" data-ncat="ma">🏢 M&amp;A</button>
-          </div>
-          <div class="filter-right">
-            <select id="newsStockFilter" class="ctrl-select sm-sel" onchange="renderNews()">
-              <option value="all">All Stocks</option>
-            </select>
-            <span class="news-count" id="newsCount"></span>
-            <button class="refresh-btn" onclick="fetchNews(true)">↺ Refresh</button>
-          </div>
-        </div>
-        <div id="newsFeed"></div>
-      </div>
-
-      <!-- ══ OPTIONS SCANNER (inside scannerPanel) ══ -->
-      <div id="optionsScanArea" style="display:none; overflow-y:auto">
-        <div class="opt-scan-bar">
-          <div class="opt-scan-left">
-            <span class="opt-scan-title">📊 Options Scanner</span>
-            <span class="opt-scan-sub" id="optScanSub">Scan options for top results</span>
-          </div>
-          <div class="opt-scan-right">
-            <select id="optScanCount" class="ctrl-select sm-sel">
-              <option value="5">Top 5</option>
-              <option value="10" selected>Top 10</option>
-              <option value="20">Top 20</option>
-            </select>
-            <select id="optFilterSig" class="ctrl-select sm-sel" onchange="renderOptTable()">
-              <option value="all">All Signals</option>
-              <option value="bullish">Bullish Only</option>
-              <option value="bearish">Bearish Only</option>
-              <option value="uoa">High Vol Spike</option>
-              <option value="iv_high">High IV (50%+)</option>
-              <option value="low_pcr">Low P/C (&lt;0.5)</option>
-            </select>
-            <select id="optSortBy" class="ctrl-select sm-sel" onchange="renderOptTable()">
-              <option value="score">Sort: Score ↓</option>
-              <option value="vol_ratio">Sort: Vol Spike ↓</option>
-              <option value="pcr_vol">Sort: P/C Ratio</option>
-              <option value="atm_iv">Sort: IV% ↓</option>
-              <option value="rsi">Sort: RSI ↓</option>
-            </select>
-            <button class="scan-btn-options" onclick="startOptionsScan()">📊 SHOW OPTIONS</button>
-          </div>
-        </div>
-        <div style="padding:12px 16px">
-          <div class="opt-empty" id="optEmptyState">
-            <div class="opt-empty-icon">📊</div>
-            <div class="opt-empty-title">Options Scanner</div>
-            <div class="opt-empty-desc">Run the main scan first, then click <strong>SHOW OPTIONS</strong></div>
-            <div class="opt-empty-note">⚡ Instant — uses data already fetched</div>
-          </div>
-          <div id="optTableWrap" style="display:none; overflow-x:auto">
-            <table class="opt-scan-table">
-              <thead><tr>
-                <th>Symbol</th><th>Signal</th><th>P/C Ratio</th>
-                <th>IV%</th><th>Vol Spike</th><th>Score</th><th>RSI</th><th>ADX</th>
-              </tr></thead>
-              <tbody id="optTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
     </div><!-- end #scannerPanel -->
+
+    <!-- ══ NEWS — sibling of #scannerPanel, shown by swapping display ══ -->
+    <div id="newsArea" style="display:none; overflow-y:auto; padding:16px; flex:1; min-height:0">
+      <div class="news-bar" id="newsBar">
+        <div class="news-chips" id="newsChips">
+          <button class="n-chip active" data-ncat="all">All</button>
+          <button class="n-chip" data-ncat="earn">📊 Earnings</button>
+          <button class="n-chip" data-ncat="launch">🚀 Launch</button>
+          <button class="n-chip" data-ncat="upgrade">⬆ Analyst</button>
+          <button class="n-chip" data-ncat="deal">🤝 Deal</button>
+          <button class="n-chip" data-ncat="ma">🏢 M&amp;A</button>
+        </div>
+        <div class="filter-right">
+          <select id="newsStockFilter" class="ctrl-select sm-sel" onchange="renderNews()">
+            <option value="all">All Stocks</option>
+          </select>
+          <span class="news-count" id="newsCount"></span>
+          <button class="refresh-btn" onclick="fetchNews(true)">↺ Refresh</button>
+        </div>
+      </div>
+      <div id="newsFeed"></div>
+    </div>
+
+    <!-- ══ OPTIONS SCANNER — sibling of #scannerPanel ══ -->
+    <div id="optionsScanArea" style="display:none; flex:1; min-height:0; overflow-y:auto">
+      <div class="opt-scan-bar">
+        <div class="opt-scan-left">
+          <span class="opt-scan-title">📊 Options Scanner</span>
+          <span class="opt-scan-sub" id="optScanSub">Scan options for top results</span>
+        </div>
+        <div class="opt-scan-right">
+          <select id="optScanCount" class="ctrl-select sm-sel">
+            <option value="5">Top 5</option>
+            <option value="10" selected>Top 10</option>
+            <option value="20">Top 20</option>
+          </select>
+          <select id="optFilterSig" class="ctrl-select sm-sel" onchange="renderOptTable()">
+            <option value="all">All Signals</option>
+            <option value="bullish">Bullish Only</option>
+            <option value="bearish">Bearish Only</option>
+            <option value="uoa">High Vol Spike</option>
+            <option value="iv_high">High IV (50%+)</option>
+            <option value="low_pcr">Low P/C (&lt;0.5)</option>
+          </select>
+          <select id="optSortBy" class="ctrl-select sm-sel" onchange="renderOptTable()">
+            <option value="score">Sort: Score ↓</option>
+            <option value="vol_ratio">Sort: Vol Spike ↓</option>
+            <option value="pcr_vol">Sort: P/C Ratio</option>
+            <option value="atm_iv">Sort: IV% ↓</option>
+            <option value="rsi">Sort: RSI ↓</option>
+          </select>
+          <button class="scan-btn-options" onclick="startOptionsScan()">📊 SHOW OPTIONS</button>
+        </div>
+      </div>
+      <div style="padding:12px 16px">
+        <div class="opt-empty" id="optEmptyState">
+          <div class="opt-empty-icon">📊</div>
+          <div class="opt-empty-title">Options Scanner</div>
+          <div class="opt-empty-desc">Run the main scan first, then click <strong>SHOW OPTIONS</strong></div>
+          <div class="opt-empty-note">⚡ Instant — uses data already fetched</div>
+        </div>
+        <div id="optTableWrap" style="display:none; overflow-x:auto">
+          <table class="opt-scan-table">
+            <thead><tr>
+              <th>Symbol</th><th>Signal</th><th>P/C Ratio</th>
+              <th>IV%</th><th>Vol Spike</th><th>Score</th><th>RSI</th><th>ADX</th>
+            </tr></thead>
+            <tbody id="optTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
   </div><!-- end .main-content -->
 
