@@ -306,12 +306,12 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
         sector_display = _SECTOR_MAP.get(tv_sector, tv_sector)
         exchange       = cm.get('exchange') or 'NASDAQ'
 
-        # AB.SK targets: Stop=5×ATR, G1=2.5×ATR, G2=5×ATR, G3=7.5×ATR
+        # Short-term targets: tight stop 1.5×, goals at 1×/2×/3× ATR
         mult_dir = 1 if direction == 'Bullish' else -1
-        stop     = round(price - mult_dir * 5.0 * atr, 4) if atr else None
-        tp1      = round(price + mult_dir * 2.5 * atr, 4) if atr else None
-        tp2      = round(price + mult_dir * 5.0 * atr, 4) if atr else None
-        tp3      = round(price + mult_dir * 7.5 * atr, 4) if atr else None
+        stop     = round(price - mult_dir * 1.5 * atr, 4) if atr else None
+        tp1      = round(price + mult_dir * 1.0 * atr, 4) if atr else None
+        tp2      = round(price + mult_dir * 2.0 * atr, 4) if atr else None
+        tp3      = round(price + mult_dir * 3.0 * atr, 4) if atr else None
         rr_val   = round(abs(tp2 - price) / max(abs(price - stop), 0.01), 2) if (tp2 and stop) else 1.0
 
         # Vote system

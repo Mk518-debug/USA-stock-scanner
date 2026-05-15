@@ -27,7 +27,7 @@ window.addEventListener('resize', fitScrollZones);
 let allResults   = [];
 let activeTab    = 'all';
 let scanType     = 'comprehensive';
-let lastTF       = '1d';
+let lastTF       = '4h';
 let searchQuery  = '';
 let watchedSet   = new Set();
 let dismissSet   = new Set();

@@ -7,12 +7,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core_regime import market_regime_score
 
-# ── Per-timeframe composite weights ──────────────────────────────────────────
+# ── Per-timeframe composite weights (tuned for short-term trading) ───────────
+# Shorter TFs: MACD momentum + Volume dominate; EMA/Regime weight drops.
 _WEIGHTS = {
-    '1d':  {'ema': 0.28, 'macd': 0.18, 'rsi': 0.12, 'vol': 0.08, 'regime': 0.10, 'st': 0.12, 'stoch': 0.06, 'mom': 0.06},
-    '4h':  {'ema': 0.22, 'macd': 0.20, 'rsi': 0.15, 'vol': 0.10, 'regime': 0.08, 'st': 0.12, 'stoch': 0.07, 'mom': 0.06},
-    '1h':  {'ema': 0.18, 'macd': 0.20, 'rsi': 0.18, 'vol': 0.12, 'regime': 0.05, 'st': 0.12, 'stoch': 0.08, 'mom': 0.07},
-    '15m': {'ema': 0.13, 'macd': 0.20, 'rsi': 0.18, 'vol': 0.15, 'regime': 0.04, 'st': 0.12, 'stoch': 0.10, 'mom': 0.08},
+    '1d':  {'ema': 0.18, 'macd': 0.28, 'rsi': 0.18, 'vol': 0.14, 'regime': 0.07, 'st': 0.08, 'stoch': 0.05, 'mom': 0.02},
+    '4h':  {'ema': 0.12, 'macd': 0.30, 'rsi': 0.23, 'vol': 0.18, 'regime': 0.05, 'st': 0.06, 'stoch': 0.04, 'mom': 0.02},
+    '1h':  {'ema': 0.08, 'macd': 0.32, 'rsi': 0.26, 'vol': 0.20, 'regime': 0.03, 'st': 0.05, 'stoch': 0.04, 'mom': 0.02},
+    '15m': {'ema': 0.05, 'macd': 0.33, 'rsi': 0.27, 'vol': 0.22, 'regime': 0.02, 'st': 0.05, 'stoch': 0.04, 'mom': 0.02},
+    '1w':  {'ema': 0.25, 'macd': 0.22, 'rsi': 0.15, 'vol': 0.10, 'regime': 0.12, 'st': 0.08, 'stoch': 0.05, 'mom': 0.03},
+    '1mo': {'ema': 0.30, 'macd': 0.20, 'rsi': 0.14, 'vol': 0.08, 'regime': 0.14, 'st': 0.07, 'stoch': 0.04, 'mom': 0.03},
 }
 
 # ── SPY relative-strength cache ───────────────────────────────────────────────
@@ -459,10 +462,17 @@ def analyze(symbol, timeframe='1d'):
             elif c < e20:       ema_sc = 42
             else:               ema_sc = 50
 
+        # MACD — histogram acceleration is the #1 short-term momentum cue
         if ml > sl:
-            macd_sc = 82 if (h0 > 0 and h0 > h1) else 68 if h0 > 0 else 58
+            if   h0 > 0 and h0 > h1:  macd_sc = 88  # rising above zero (best)
+            elif h0 > h1:              macd_sc = 76  # accelerating (sub-zero)
+            elif h0 > 0:               macd_sc = 65  # positive, decelerating
+            else:                      macd_sc = 55  # macd > sig, both negative
         else:
-            macd_sc = 18 if (h0 < 0 and h0 < h1) else 32 if h0 < 0 else 42
+            if   h0 < 0 and h0 < h1:  macd_sc = 12  # falling below zero (worst)
+            elif h0 < h1:              macd_sc = 24  # accelerating down
+            elif h0 < 0:               macd_sc = 35  # negative but improving
+            else:                      macd_sc = 45  # macd < sig, positive histo
 
         rsi_sc = rsi_score(r, r_prev)
 
@@ -572,15 +582,19 @@ def analyze(symbol, timeframe='1d'):
         # ── Candlestick + technical patterns ─────────────────────────────────
         patterns = candle_patterns(opens, high, low, close)
 
-        if div == 'bullish':    patterns.append('Bullish Divergence')
-        if div == 'bearish':    patterns.append('Bearish Divergence')
-        if bb_squeeze >= 70:    patterns.append(f'BB Squeeze {bb_squeeze}%')
-        if adx_rising:          patterns.append('ADX Rising')
-        if stoch_k < 25:        patterns.append('Stoch Oversold')
-        if stoch_k > 75:        patterns.append('Stoch Overbought')
-        if mtf > 0:             patterns.append('HTF Aligned')
-        if rs_20 >= 5:          patterns.append('RS+ vs SPY')
-        if rs_20 <= -5:         patterns.append('RS- vs SPY')
+        if div == 'bullish':                    patterns.append('Bullish Divergence')
+        if div == 'bearish':                    patterns.append('Bearish Divergence')
+        if bb_squeeze >= 70:                    patterns.append(f'BB Squeeze {bb_squeeze}%')
+        if adx_rising:                          patterns.append('ADX Rising')
+        if stoch_k < 25:                        patterns.append('Stoch Oversold')
+        if stoch_k > 75:                        patterns.append('Stoch Overbought')
+        if mtf > 0:                             patterns.append('HTF Aligned')
+        if rs_20 >= 5:                          patterns.append('RS+ vs SPY')
+        if rs_20 <= -5:                         patterns.append('RS- vs SPY')
+        # Short-term momentum signals
+        if ml > sl and h0 > 0 and h0 > h1:     patterns.append('MACD Accel')
+        if vr >= 2.0:                           patterns.append('Vol Surge')
+        if 55 <= r <= 70 and (r - r_prev) > 0: patterns.append('RSI Momentum')
 
         # ── Support & Resistance (20-bar pivot) ──────────────────────────────
         if len(high) >= 21:
@@ -590,13 +604,13 @@ def analyze(symbol, timeframe='1d'):
             resistance = round(c * 1.05, 4)
             support    = round(c * 0.95, 4)
 
-        # ── AB.SK trade levels ────────────────────────────────────────────────
+        # ── Short-term trade levels: tight stop, quick targets ───────────────
         mult_dir = 1 if direction == 'Bullish' else -1
         entry    = round(c, 4)
-        stop_lvl = round(c - mult_dir * 5.0 * atr, 4)
-        tp1      = round(c + mult_dir * 2.5 * atr, 4)
-        tp2      = round(c + mult_dir * 5.0 * atr, 4)
-        tp3      = round(c + mult_dir * 7.5 * atr, 4)
+        stop_lvl = round(c - mult_dir * 1.5 * atr, 4)   # 1.5× ATR stop
+        tp1      = round(c + mult_dir * 1.0 * atr, 4)   # 1× ATR — first exit
+        tp2      = round(c + mult_dir * 2.0 * atr, 4)   # 2× ATR — main target
+        tp3      = round(c + mult_dir * 3.0 * atr, 4)   # 3× ATR — runner
         rr_ratio = round(abs(tp2 - c) / max(abs(c - stop_lvl), 0.01), 2)
 
         return {
