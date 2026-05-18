@@ -181,8 +181,12 @@ def scan():
     if rsi_max < 100:
         results = [r for r in results if (r.get('rsi') or 100) <= rsi_max]
 
+    scan_ts    = ny_time()
+    for r in results:
+        r['scan_time'] = scan_ts          # timestamp every individual result
+
     candles    = [r['last_candle'] for r in results if r.get('last_candle')]
-    data_as_of = max(candles) if candles else ny_time()
+    data_as_of = max(candles) if candles else scan_ts
 
     reg = market_regime_score()
 

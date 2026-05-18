@@ -311,6 +311,12 @@ html, body    { height: 100%; overflow: hidden; margin: 0; }
 .pattern-tag.purple { background: rgba(179,136,255,.1);  color: var(--purple); border-color: rgba(179,136,255,.25); }
 .sk-agree       { width: 100%; font-size: 0.62rem; color: var(--text3); margin-top: 3px; }
 
+/* ── Signal timestamp row ── */
+.card-signal-time { display: flex; align-items: center; gap: 5px; padding: 5px 14px; border-top: 1px solid var(--border); background: rgba(68,138,255,.04); }
+.cst-icon  { font-size: 0.72rem; }
+.cst-label { font-size: 0.68rem; color: var(--text3); }
+.cst-val   { font-size: 0.68rem; font-weight: 600; color: var(--blue); }
+
 /* ── Card Footer ── */
 .card-footer    { padding: 8px 14px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.12); }
 .cf-btn         { background: var(--bg3); border: 1px solid var(--border2); color: var(--text2); padding: 4px 10px; border-radius: var(--r-sm); cursor: pointer; font-size: 0.72rem; transition: all .15s; text-decoration: none; display: inline-flex; align-items: center; }
