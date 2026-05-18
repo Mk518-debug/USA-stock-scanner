@@ -527,10 +527,14 @@ function getPatterns(r) {
       const lp = p.toLowerCase();
       const cls = (lp.includes('bull') || lp.includes('hammer') ||
                    lp.includes('breakout') || lp.includes('rs+') ||
-                   lp.includes('htf aligned') || lp.includes('bullish')) ? 'green'
+                   lp.includes('htf aligned') || lp.includes('bullish') ||
+                   lp.includes('ema cross ▲') || lp.includes('macd accel') ||
+                   lp.includes('rsi momentum')) ? 'green'
                 : (lp.includes('bear') || lp.includes('star') ||
-                   lp.includes('rs-') || lp.includes('bearish')) ? 'red'
-                : (lp.includes('adx')) ? 'blue'
+                   lp.includes('rs-') || lp.includes('bearish') ||
+                   lp.includes('ema cross ▼')) ? 'red'
+                : (lp.includes('adx') || lp.includes('vol surge') ||
+                   lp.includes('vol spike')) ? 'blue'
                 : (lp.includes('bb squeeze')) ? 'purple'
                 : '';
       t.push({ label: p, cls });

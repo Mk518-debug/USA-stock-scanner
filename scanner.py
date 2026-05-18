@@ -83,7 +83,7 @@ def _stochastic(high, low, close, k_period=14, d_period=3):
     return k_val, d_val
 
 
-def _momentum_score(close, period=20):
+def _momentum_score(close, period=10):   # 10-day better for swing (was 20)
     """Price momentum: 20-day return mapped to 0-100 score."""
     if len(close) < period + 1:
         return 50.0
@@ -111,7 +111,7 @@ def _bollinger(close, period=20, std_dev=2.0):
             squeeze_pct)
 
 
-def _supertrend(high, low, close, period=10, multiplier=3.0):
+def _supertrend(high, low, close, period=14, multiplier=2.5):  # swing: 14/2.5 vs intraday 10/3.0
     """Returns (st_value, direction) where direction 1=bull, -1=bear."""
     atr_s     = _atr(high, low, close, period)
     hl2       = (high + low) / 2.0
@@ -211,8 +211,8 @@ def _count_votes(c, e20, e50, e200, ml, sl, r, vr, st_dir,
         if   pdi > ndi: up   += 1
         elif ndi > pdi: down += 1
 
-    # 7. Volume confirmation (follows stronger side)
-    if vr >= 1.5:
+    # 7. Volume confirmation (lowered to 1.3 for earlier swing entry signal)
+    if vr >= 1.3:
         if   up > down: up   += 1
         elif down > up: down += 1
 
@@ -228,9 +228,9 @@ def _count_votes(c, e20, e50, e200, ml, sl, r, vr, st_dir,
         elif stoch_k < 20 and stoch_k > stoch_d:  up   += 1  # oversold recovery
         elif stoch_k > 80 and stoch_k < stoch_d:  down += 1  # overbought reversal
 
-    # 10. Momentum (20-day price direction, abstains if flat)
-    if mom_score >= 58: up   += 1
-    elif mom_score <= 42: down += 1
+    # 10. Momentum (10-day price direction, wider swing entry band 55/45)
+    if mom_score >= 55: up   += 1
+    elif mom_score <= 45: down += 1
 
     # 11-12. Divergence counts x2 (strong reversal signal)
     if   divergence == 'bullish': up   += 2
@@ -346,7 +346,7 @@ def _local_troughs(arr, min_dist=4):
     return result
 
 
-def detect_divergence(close, rsi_s, lookback=40):
+def detect_divergence(close, rsi_s, lookback=20):  # 20 bars = 4 weeks on 1D, right for swing
     if len(close) < lookback or len(rsi_s) < lookback:
         return None
     c = list(close.values[-lookback:])
@@ -592,10 +592,15 @@ def analyze(symbol, timeframe='1d'):
         if mtf > 0:                             patterns.append('HTF Aligned')
         if rs_20 >= 5:                          patterns.append('RS+ vs SPY')
         if rs_20 <= -5:                         patterns.append('RS- vs SPY')
-        # Short-term momentum signals
+        # Swing momentum signals
         if ml > sl and h0 > 0 and h0 > h1:     patterns.append('MACD Accel')
         if vr >= 2.0:                           patterns.append('Vol Surge')
         if 55 <= r <= 70 and (r - r_prev) > 0: patterns.append('RSI Momentum')
+        # EMA crossover in last 5 bars (fresh swing entry signal)
+        if len(ema20) >= 6 and len(ema50) >= 6:
+            e20_5 = float(ema20.iloc[-6]); e50_5 = float(ema50.iloc[-6])
+            if e20_5 < e50_5 and e20 > e50:    patterns.append('EMA Cross ▲')
+            elif e20_5 > e50_5 and e20 < e50:  patterns.append('EMA Cross ▼')
 
         # ── Support & Resistance (20-bar pivot) ──────────────────────────────
         if len(high) >= 21:
