@@ -30,23 +30,43 @@ ml_engine.load_model()   # warm up from DB (no-op if no model yet)
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.executors.pool import ThreadPoolExecutor as _TPE
     from outcome_evaluator import auto_scan
-    _scheduler = BackgroundScheduler(daemon=True)
-    # Outcome evaluation — 06:00 UTC daily
-    _scheduler.add_job(evaluate_pending_outcomes, 'cron', hour=6, minute=0,
+
+    # misfire_grace_time=3600 — if the app restarts within 1 hour of a
+    # scheduled job, APScheduler will still run it on startup rather than skip it.
+    _scheduler = BackgroundScheduler(
+        daemon=True,
+        executors={'default': _TPE(max_workers=4)},
+        job_defaults={'misfire_grace_time': 3600, 'coalesce': True},
+    )
+
+    # ── Daily evaluation + ML retrain ─────────────────────────────────────
+    # 06:00 UTC: evaluate outcomes, update weights, retrain ML model
+    _scheduler.add_job(evaluate_pending_outcomes, 'cron',
+                       hour=6, minute=0, day_of_week='mon-fri',
                        id='outcome_eval', replace_existing=True)
-    # Auto market scans — 3× per trading day (UTC times = ET + 4h)
-    # 13:45 UTC = 09:45 ET (morning open)
-    # 17:00 UTC = 13:00 ET (midday)
-    # 19:30 UTC = 15:30 ET (30 min before close)
-    _scheduler.add_job(auto_scan, 'cron', hour=13, minute=45,
+
+    # 07:00 UTC: standalone ML retrain (catches any signals the evaluator
+    # processed but didn't trigger a retrain for)
+    _scheduler.add_job(ml_engine.train_model, 'cron',
+                       hour=7, minute=0, day_of_week='mon-fri',
+                       id='ml_retrain', replace_existing=True)
+
+    # ── Auto market scans (Mon–Fri only) ──────────────────────────────────
+    # 13:45 UTC = 09:45 ET  |  17:00 UTC = 13:00 ET  |  19:30 UTC = 15:30 ET
+    _scheduler.add_job(auto_scan, 'cron',
+                       hour=13, minute=45, day_of_week='mon-fri',
                        id='auto_scan_morning',   replace_existing=True)
-    _scheduler.add_job(auto_scan, 'cron', hour=17, minute=0,
+    _scheduler.add_job(auto_scan, 'cron',
+                       hour=17, minute=0,  day_of_week='mon-fri',
                        id='auto_scan_midday',    replace_existing=True)
-    _scheduler.add_job(auto_scan, 'cron', hour=19, minute=30,
+    _scheduler.add_job(auto_scan, 'cron',
+                       hour=19, minute=30, day_of_week='mon-fri',
                        id='auto_scan_afternoon', replace_existing=True)
+
     _scheduler.start()
-    print('[scheduler] jobs scheduled: outcome eval + 3 daily auto scans')
+    print('[scheduler] 5 jobs active: 3× auto-scan + eval + ML retrain')
 except Exception as _sched_err:
     print(f'[scheduler] APScheduler not available ({_sched_err}) — skipping')
 
