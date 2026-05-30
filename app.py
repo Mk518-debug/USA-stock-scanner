@@ -19,12 +19,14 @@ from core_regime import market_regime_score, regime_label
 import db
 from signal_logger import log_signals_async
 from outcome_evaluator import evaluate_pending_outcomes, get_learning_stats
+import ml_engine
 
 app = Flask(__name__)
 CORS(app)
 
 # ── Learning system startup ────────────────────────────────────────────────────
 db.init_db()
+ml_engine.load_model()   # warm up from DB (no-op if no model yet)
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -318,6 +320,25 @@ def scan():
         'scan_insight':    insight,
     }
 
+    # ── ML score injection ────────────────────────────────────────────────────
+    ml_info = ml_engine.get_model_info()
+    if ml_info.get('active'):
+        samples = ml_info.get('samples', 0)
+        # Gradually increase ML influence: 20% at 200 samples → 50% at 2000+
+        ml_weight = min(0.50, 0.20 + max(0, samples - 200) / 1800 * 0.30)
+        for r in results:
+            ml_prob = ml_engine.predict(r)
+            r['ml_score'] = ml_prob
+            if ml_prob is not None:
+                r['score'] = max(0, min(100,
+                    int((1 - ml_weight) * r['score'] + ml_weight * ml_prob)
+                ))
+    else:
+        for r in results:
+            r['ml_score'] = None
+
+    payload['ml_model'] = ml_info
+
     log_signals_async(results, timeframe, source)
     _cset(cache_key, payload)
     return jsonify(payload)
@@ -325,7 +346,9 @@ def scan():
 
 @app.route('/api/admin/learning-stats')
 def learning_stats():
-    return jsonify(get_learning_stats())
+    stats = get_learning_stats()
+    stats['ml_model'] = ml_engine.get_model_info()
+    return jsonify(stats)
 
 
 @app.route('/api/admin/evaluate', methods=['POST'])

@@ -106,6 +106,17 @@ def init_db():
                 UNIQUE(timeframe, indicator)
             )
         ''')
+        # ML model storage — bytea blob, one row per trained model
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS ml_models (
+                id           SERIAL PRIMARY KEY,
+                model_type   VARCHAR(50)  NOT NULL,
+                model_data   BYTEA        NOT NULL,
+                sample_count INTEGER      NOT NULL,
+                accuracy     FLOAT,
+                trained_at   TIMESTAMPTZ  DEFAULT NOW()
+            )
+        ''')
         # Index for fast pending-signal lookup
         cur.execute('''
             CREATE INDEX IF NOT EXISTS idx_signals_scanned_at

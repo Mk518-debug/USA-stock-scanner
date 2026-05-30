@@ -46,6 +46,13 @@ def evaluate_pending_outcomes():
     finally:
         db.put_conn(conn)
 
+    # Retrain ML model after new outcomes are recorded
+    try:
+        from ml_engine import train_model
+        train_model()
+    except Exception as e:
+        print(f'[evaluator] ml train error: {e}')
+
 
 # ── Signal evaluation ─────────────────────────────────────────────────────────
 
