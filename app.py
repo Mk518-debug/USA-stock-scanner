@@ -28,11 +28,23 @@ db.init_db()
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
+    from outcome_evaluator import auto_scan
     _scheduler = BackgroundScheduler(daemon=True)
+    # Outcome evaluation — 06:00 UTC daily
     _scheduler.add_job(evaluate_pending_outcomes, 'cron', hour=6, minute=0,
                        id='outcome_eval', replace_existing=True)
+    # Auto market scans — 3× per trading day (UTC times = ET + 4h)
+    # 13:45 UTC = 09:45 ET (morning open)
+    # 17:00 UTC = 13:00 ET (midday)
+    # 19:30 UTC = 15:30 ET (30 min before close)
+    _scheduler.add_job(auto_scan, 'cron', hour=13, minute=45,
+                       id='auto_scan_morning',   replace_existing=True)
+    _scheduler.add_job(auto_scan, 'cron', hour=17, minute=0,
+                       id='auto_scan_midday',    replace_existing=True)
+    _scheduler.add_job(auto_scan, 'cron', hour=19, minute=30,
+                       id='auto_scan_afternoon', replace_existing=True)
     _scheduler.start()
-    print('[scheduler] outcome evaluator scheduled at 06:00 daily')
+    print('[scheduler] jobs scheduled: outcome eval + 3 daily auto scans')
 except Exception as _sched_err:
     print(f'[scheduler] APScheduler not available ({_sched_err}) — skipping')
 

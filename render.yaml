@@ -15,13 +15,53 @@ services:
     env: python
     region: oregon
     plan: free
-    schedule: "0 6 * * *"
+    schedule: "0 6 * * 1-5"
     buildCommand: pip install -r requirements.txt
     startCommand: python -c "import db; db.init_db(); from outcome_evaluator import evaluate_pending_outcomes; evaluate_pending_outcomes()"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DATABASE_URL
-        fromDatabase:
-          name: stock-scanner-db
-          property: connectionString
+        sync: false
+
+  - type: cron
+    name: auto-scan-morning
+    env: python
+    region: oregon
+    plan: free
+    schedule: "45 13 * * 1-5"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "import db; db.init_db(); from outcome_evaluator import auto_scan; auto_scan()"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        sync: false
+
+  - type: cron
+    name: auto-scan-midday
+    env: python
+    region: oregon
+    plan: free
+    schedule: "0 17 * * 1-5"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "import db; db.init_db(); from outcome_evaluator import auto_scan; auto_scan()"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        sync: false
+
+  - type: cron
+    name: auto-scan-afternoon
+    env: python
+    region: oregon
+    plan: free
+    schedule: "30 19 * * 1-5"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "import db; db.init_db(); from outcome_evaluator import auto_scan; auto_scan()"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        sync: false

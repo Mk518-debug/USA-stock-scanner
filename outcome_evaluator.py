@@ -250,3 +250,38 @@ def get_learning_stats():
         return {'enabled': True, 'error': str(e)}
     finally:
         db.put_conn(conn)
+
+
+# ── Automatic scheduled scan ──────────────────────────────────────────────────
+
+def auto_scan():
+    """
+    Runs a full market scan automatically and logs results to the DB.
+    Called by APScheduler 3× per trading day — no user interaction needed.
+    Skips weekends.
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    # Skip Saturday (5) and Sunday (6)
+    if now.weekday() >= 5:
+        print('[auto_scan] weekend — skipping')
+        return
+
+    try:
+        from tv_scanner import scan_tv
+        from signal_logger import log_signals_async
+
+        total = 0
+        for tf in ('1d', '4h'):
+            try:
+                results = scan_tv(sector='all', timeframe=tf, min_score=50, limit=150)
+                if results:
+                    log_signals_async(results, tf, 'TradingView')
+                    total += len(results)
+                    print(f'[auto_scan] {tf}: {len(results)} signals logged')
+            except Exception as e:
+                print(f'[auto_scan] {tf} error: {e}')
+
+        print(f'[auto_scan] done — {total} total signals logged')
+    except Exception as e:
+        print(f'[auto_scan] failed: {e}')
