@@ -9,3 +9,19 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+
+  - type: cron
+    name: outcome-evaluator
+    env: python
+    region: oregon
+    plan: free
+    schedule: "0 6 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "import db; db.init_db(); from outcome_evaluator import evaluate_pending_outcomes; evaluate_pending_outcomes()"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stock-scanner-db
+          property: connectionString
