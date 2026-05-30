@@ -12,14 +12,12 @@ import db
 # How many calendar days to wait before evaluating — matched to each timeframe's
 # typical holding period so the signal has enough time to reach TP or stop.
 _EVAL_DAYS = {
-    '1d':  14,   # swing trade: up to 2-3 weeks
+    '1d':  14,   # swing trade: up to 2 weeks
     '4h':  7,    # medium hold: ~1 week
     '1h':  3,    # short hold: 2-3 days
-    '15m': 2,    # intraday/scalp: 1-2 days
-    '1w':  28,   # weekly: ~4 weeks
-    '1mo': 45,   # monthly: 6 weeks
+    '15m': 2,    # scalp: 1-2 days
 }
-_DEFAULT_EVAL_DAYS = 10
+_DEFAULT_EVAL_DAYS = 7
 
 # yfinance period string to fetch enough history to cover evaluation window
 _FETCH_PERIOD = {
@@ -27,10 +25,8 @@ _FETCH_PERIOD = {
     '4h':  '12d',
     '1h':  '7d',
     '15m': '5d',
-    '1w':  '45d',
-    '1mo': '60d',
 }
-_DEFAULT_FETCH = '15d'
+_DEFAULT_FETCH = '12d'
 
 
 def evaluate_pending_outcomes():
