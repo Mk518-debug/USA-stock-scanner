@@ -16,9 +16,25 @@ from scanner import run_scan
 from stock_lists import get_symbols_by_sector, get_stock_info, SECTORS
 from news_fetch import fetch_news
 from core_regime import market_regime_score, regime_label
+import db
+from signal_logger import log_signals_async
+from outcome_evaluator import evaluate_pending_outcomes, get_learning_stats
 
 app = Flask(__name__)
 CORS(app)
+
+# ── Learning system startup ────────────────────────────────────────────────────
+db.init_db()
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(evaluate_pending_outcomes, 'cron', hour=6, minute=0,
+                       id='outcome_eval', replace_existing=True)
+    _scheduler.start()
+    print('[scheduler] outcome evaluator scheduled at 06:00 daily')
+except Exception as _sched_err:
+    print(f'[scheduler] APScheduler not available ({_sched_err}) — skipping')
 
 # ── Shared singleton yfinance session (cookies fetched once) ─────────────
 import threading as _threading
@@ -290,8 +306,22 @@ def scan():
         'scan_insight':    insight,
     }
 
+    log_signals_async(results, timeframe, source)
     _cset(cache_key, payload)
     return jsonify(payload)
+
+
+@app.route('/api/admin/learning-stats')
+def learning_stats():
+    return jsonify(get_learning_stats())
+
+
+@app.route('/api/admin/evaluate', methods=['POST'])
+def trigger_evaluation():
+    """Manually trigger outcome evaluation (admin use)."""
+    import threading
+    threading.Thread(target=evaluate_pending_outcomes, daemon=True).start()
+    return jsonify({'status': 'started'})
 
 
 @app.route('/api/news', methods=['POST'])

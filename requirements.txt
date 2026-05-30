@@ -4,3 +4,5 @@ pandas>=2.0.0
 numpy>=1.24.0
 flask-cors==4.0.1
 gunicorn==23.0.0
+psycopg2-binary>=2.9.9
+APScheduler>=3.10.4

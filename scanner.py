@@ -6,18 +6,7 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core_regime import market_regime_score
-
-# ── Per-timeframe composite weights (swing trading: days to weeks) ───────────
-# 1D/4H: balance EMA trend + MACD momentum + Regime for multi-day holds.
-# Shorter TFs: momentum dominates for entry timing.
-_WEIGHTS = {
-    '1d':  {'ema': 0.22, 'macd': 0.25, 'rsi': 0.18, 'vol': 0.12, 'regime': 0.10, 'st': 0.08, 'stoch': 0.04, 'mom': 0.01},
-    '4h':  {'ema': 0.17, 'macd': 0.27, 'rsi': 0.20, 'vol': 0.15, 'regime': 0.08, 'st': 0.07, 'stoch': 0.04, 'mom': 0.02},
-    '1h':  {'ema': 0.10, 'macd': 0.30, 'rsi': 0.24, 'vol': 0.18, 'regime': 0.05, 'st': 0.06, 'stoch': 0.05, 'mom': 0.02},
-    '15m': {'ema': 0.06, 'macd': 0.32, 'rsi': 0.26, 'vol': 0.20, 'regime': 0.03, 'st': 0.06, 'stoch': 0.05, 'mom': 0.02},
-    '1w':  {'ema': 0.28, 'macd': 0.20, 'rsi': 0.14, 'vol': 0.10, 'regime': 0.14, 'st': 0.08, 'stoch': 0.04, 'mom': 0.02},
-    '1mo': {'ema': 0.32, 'macd': 0.18, 'rsi': 0.12, 'vol': 0.08, 'regime': 0.16, 'st': 0.07, 'stoch': 0.04, 'mom': 0.03},
-}
+from signal_logger import get_weights as _get_weights
 
 # ── SPY relative-strength cache ───────────────────────────────────────────────
 _SPY_CACHE = {'ts': 0.0, 'ret20': 0.0}
@@ -513,7 +502,7 @@ def analyze(symbol, timeframe='1d'):
         regime_sc  = 50 + 50 * regime_adj
 
         # ── Composite score (per-timeframe weights) ───────────────────────────
-        w = _WEIGHTS.get(timeframe, _WEIGHTS['1d'])
+        w = _get_weights(timeframe)
         composite = (
             w['ema']    * ema_sc
             + w['macd'] * macd_sc
