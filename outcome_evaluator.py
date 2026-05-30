@@ -9,7 +9,28 @@ from datetime import datetime, timezone, timedelta
 import yfinance as yf
 import db
 
-EVAL_DAYS = 5
+# How many calendar days to wait before evaluating — matched to each timeframe's
+# typical holding period so the signal has enough time to reach TP or stop.
+_EVAL_DAYS = {
+    '1d':  14,   # swing trade: up to 2-3 weeks
+    '4h':  7,    # medium hold: ~1 week
+    '1h':  3,    # short hold: 2-3 days
+    '15m': 2,    # intraday/scalp: 1-2 days
+    '1w':  28,   # weekly: ~4 weeks
+    '1mo': 45,   # monthly: 6 weeks
+}
+_DEFAULT_EVAL_DAYS = 10
+
+# yfinance period string to fetch enough history to cover evaluation window
+_FETCH_PERIOD = {
+    '1d':  '25d',
+    '4h':  '12d',
+    '1h':  '7d',
+    '15m': '5d',
+    '1w':  '45d',
+    '1mo': '60d',
+}
+_DEFAULT_FETCH = '15d'
 
 
 def evaluate_pending_outcomes():
@@ -34,16 +55,19 @@ def evaluate_pending_outcomes():
 
 def _eval_signals(conn):
     cur = conn.cursor()
-    cutoff = datetime.now(timezone.utc) - timedelta(days=EVAL_DAYS)
+    # Fetch signals whose timeframe eval window has passed — use the longest
+    # window (28 days) as the outer cutoff so we catch everything.
+    max_cutoff = datetime.now(timezone.utc) - timedelta(days=2)
     cur.execute(
         '''
-        SELECT s.id, s.symbol, s.direction, s.price, s.tp1, s.tp2, s.stop
+        SELECT s.id, s.symbol, s.timeframe, s.direction, s.price, s.tp1, s.tp2,
+               s.stop, s.scanned_at
         FROM signals s
         LEFT JOIN signal_outcomes o ON o.signal_id = s.id
         WHERE s.scanned_at <= %s AND o.id IS NULL
         LIMIT 150
         ''',
-        (cutoff,),
+        (max_cutoff,),
     )
     rows = cur.fetchall()
     cur.close()
@@ -52,23 +76,34 @@ def _eval_signals(conn):
         print('[evaluator] no pending signals')
         return
 
-    print(f'[evaluator] evaluating {len(rows)} signals')
-    for sig_id, symbol, direction, entry, tp1, tp2, stop in rows:
+    now = datetime.now(timezone.utc)
+    evaluated = 0
+    for sig_id, symbol, timeframe, direction, entry, tp1, tp2, stop, scanned_at in rows:
+        eval_days = _EVAL_DAYS.get(timeframe, _DEFAULT_EVAL_DAYS)
+        # Only evaluate once the holding window has elapsed
+        if scanned_at and (now - scanned_at).days < eval_days:
+            continue
         try:
-            _eval_one(conn, sig_id, symbol, direction, entry, tp1, tp2, stop)
+            _eval_one(conn, sig_id, symbol, timeframe, direction, entry, tp1, tp2,
+                      stop, eval_days)
+            evaluated += 1
         except Exception as e:
             print(f'[evaluator] {symbol}: {e}')
 
+    print(f'[evaluator] evaluated {evaluated} signals')
 
-def _eval_one(conn, sig_id, symbol, direction, entry, tp1, tp2, stop):
-    hist = yf.Ticker(symbol).history(period='8d', interval='1d')
+
+def _eval_one(conn, sig_id, symbol, timeframe, direction, entry, tp1, tp2, stop,
+              eval_days):
+    fetch_period = _FETCH_PERIOD.get(timeframe, _DEFAULT_FETCH)
+    hist = yf.Ticker(symbol).history(period=fetch_period, interval='1d')
     if hist.empty or entry is None:
         return
 
-    bull        = direction == 'Bullish'
-    exit_price  = float(hist['Close'].iloc[-1])
-    high_max    = float(hist['High'].max())
-    low_min     = float(hist['Low'].min())
+    bull       = direction == 'Bullish'
+    exit_price = float(hist['Close'].iloc[-1])
+    high_max   = float(hist['High'].max())
+    low_min    = float(hist['Low'].min())
 
     # Return % from the trader's perspective (positive = profit)
     return_pct = (exit_price - entry) / entry * 100
@@ -83,9 +118,9 @@ def _eval_one(conn, sig_id, symbol, direction, entry, tp1, tp2, stop):
         outcome = 'win'
     elif hit_stop and not hit_tp1:
         outcome = 'loss'
-    elif return_pct >= 2.0:
+    elif return_pct >= 3.0:
         outcome = 'win'
-    elif return_pct <= -2.0:
+    elif return_pct <= -3.0:
         outcome = 'loss'
     else:
         outcome = 'neutral'
