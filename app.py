@@ -863,20 +863,24 @@ def options_flow_scan():
     cache_key = 'optflow_scan'
     if not force:
         cached = _cache.get(cache_key)
-        if cached and time.time() - cached['ts'] < 900:
+        # Only serve cache if it actually has results
+        if cached and time.time() - cached['ts'] < 900 and cached['data'].get('total', 0) > 0:
             cached['data']['from_cache'] = True
             return jsonify(cached['data'])
 
     try:
         from options_flow import scan_options_flow
-        results = scan_options_flow(force=force)
+        results, errors, checked = scan_options_flow(force=force)
         payload = {
             'results':    results,
             'total':      len(results),
+            'checked':    checked,
+            'errors':     errors,
             'timestamp':  ny_time(),
             'from_cache': False,
         }
-        _cset(cache_key, payload)
+        if results:   # only cache non-empty results
+            _cset(cache_key, payload)
         return jsonify(payload)
     except Exception as e:
         traceback.print_exc()

@@ -1785,11 +1785,13 @@ document.querySelectorAll('#ofTypeGroup .seg-btn').forEach(b => {
   });
 });
 
+let _flowMeta = { checked: 0, errors: 0 };
+
 async function fetchOptionsFlow(force = false) {
   const tbody = document.getElementById('ofFlowBody');
   if (!force && _flowResults.length) { renderOptionsFlow(); return; }
 
-  if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="vs-empty">Scanning options flow — this may take 15-30s…</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="vs-empty">Scanning options chains — this may take 20-40s…</td></tr>';
 
   try {
     const res  = await fetch('/api/options-flow/scan', {
@@ -1801,6 +1803,7 @@ async function fetchOptionsFlow(force = false) {
     if (data.error) throw new Error(data.error);
     _flowResults = data.results || [];
     _flowLastTs  = data.timestamp || '';
+    _flowMeta    = { checked: data.checked || 0, errors: data.errors || 0 };
     renderOptionsFlow();
   } catch(e) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="11" class="vs-empty" style="color:var(--red)">Error: ${e.message}</td></tr>`;
@@ -1818,11 +1821,17 @@ function renderOptionsFlow() {
   else if (typeFilter === 'bearish') rows = rows.filter(r => r.flow_cls === 'bearish');
   else if (typeFilter === 'sweep')   rows = rows.filter(r => r.flow_type?.includes('sweep'));
 
-  if (countEl) countEl.textContent = `${rows.length} stocks`;
+  const meta = _flowMeta.checked
+    ? ` · checked ${_flowMeta.checked}` + (_flowMeta.errors ? ` · ${_flowMeta.errors} failed` : '')
+    : '';
+  if (countEl) countEl.textContent = `${rows.length} stocks${meta}`;
   if (tsEl)    tsEl.textContent    = _flowLastTs;
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="11" class="vs-empty">No unusual options activity found</td></tr>';
+    const hint = _flowMeta.checked > 0 && _flowMeta.errors === _flowMeta.checked
+      ? 'Yahoo Finance rate limit hit — try again in a few minutes'
+      : 'No unusual options activity detected — works best during market hours (9:30AM–4PM ET)';
+    tbody.innerHTML = `<tr><td colspan="11" class="vs-empty">${hint}</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => _buildFlowRow(r)).join('');
