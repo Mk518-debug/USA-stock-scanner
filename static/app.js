@@ -13,7 +13,7 @@ function fitScrollZones() {
   const stickyH = sticky  ? sticky.offsetHeight  : 0;
   const scrollH = Math.max(100, winH - headerH - stickyH);
 
-  ['cardsArea','newsArea','reportArea','screenArea'].forEach(id => {
+  ['cardsArea','newsArea','volumeSurgeArea','reportArea','screenArea'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.height = scrollH + 'px';
   });
@@ -219,14 +219,19 @@ document.querySelectorAll('.ftab').forEach(tab => {
     currentPage = 0;
     const scannerEl = document.getElementById('scannerPanel');
     const newsEl    = document.getElementById('newsArea');
+    const surgeEl   = document.getElementById('volumeSurgeArea');
 
     // Hide all top-level content panels
     if (scannerEl) scannerEl.style.display = 'none';
     if (newsEl)    newsEl.style.display    = 'none';
+    if (surgeEl)   surgeEl.style.display   = 'none';
 
     if (activeTab === 'news') {
       if (newsEl) newsEl.style.display = '';
       fetchNews();
+    } else if (activeTab === 'surge') {
+      if (surgeEl) surgeEl.style.display = '';
+      fetchVolumeSurge();
     } else {
       if (scannerEl) scannerEl.style.display = '';
       render();
@@ -1569,3 +1574,138 @@ function renderNews() {
   }).join('');
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// VOLUME SURGE
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _surgeResults = [];
+let _surgeLastTs  = '';
+
+// Segment button helpers for surge filters
+document.querySelectorAll('#vsRatioGroup .seg-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#vsRatioGroup .seg-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    fetchVolumeSurge(true);
+  });
+});
+document.querySelectorAll('#vsPriceGroup .seg-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#vsPriceGroup .seg-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    fetchVolumeSurge(true);
+  });
+});
+
+async function fetchVolumeSurge(force = false) {
+  const ratioBtn = document.querySelector('#vsRatioGroup .seg-btn.active');
+  const priceBtn = document.querySelector('#vsPriceGroup .seg-btn.active');
+  const minRatio = parseFloat(ratioBtn?.dataset.ratio || 2);
+  const minPrice = parseFloat(priceBtn?.dataset.price  || 5);
+
+  const tbody = document.getElementById('vsSurgeBody');
+  if (!force && _surgeResults.length) { renderVolumeSurge(); return; }
+
+  if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="vs-empty">Loading…</td></tr>';
+
+  try {
+    const res  = await fetch('/api/volume-surge', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ min_vol_ratio: minRatio, min_price: minPrice, force }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    _surgeResults = data.results || [];
+    _surgeLastTs  = data.timestamp || '';
+    renderVolumeSurge();
+  } catch(e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="11" class="vs-empty" style="color:var(--red)">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderVolumeSurge() {
+  const sigFilter = document.getElementById('vsSigFilter')?.value || 'all';
+  const tbody     = document.getElementById('vsSurgeBody');
+  const countEl   = document.getElementById('vsSurgeCount');
+  const tsEl      = document.getElementById('vsSurgeTs');
+
+  let rows = _surgeResults;
+  if (sigFilter !== 'all') rows = rows.filter(r => r.signal_cls === sigFilter);
+
+  if (countEl) countEl.textContent = `${rows.length} stocks`;
+  if (tsEl)    tsEl.textContent    = _surgeLastTs;
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="11" class="vs-empty">No stocks found — try lowering the ratio filter</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => _buildSurgeRow(r)).join('');
+}
+
+function _buildSurgeRow(r) {
+  const chgCls  = r.change_pct >= 0 ? 'pos' : 'neg';
+  const chgSign = r.change_pct >= 0 ? '+' : '';
+  const volFmt  = _fmtVol(r.volume);
+  const avgFmt  = _fmtVol(r.avg_volume);
+
+  const tierLabel = {
+    'extreme':   '🔴 10×+',
+    'very-high': '🟠 5-10×',
+    'high':      '🟡 3-5×',
+    'elevated':  '🟢 2-3×',
+  }[r.vol_tier] || r.rel_vol + '×';
+
+  const sigColors = {
+    'breakout':     '#22c55e',
+    'accumulation': '#3b82f6',
+    'coiling':      '#a78bfa',
+    'momentum':     '#f59e0b',
+    'capitulation': '#ef4444',
+    'distribution': '#f97316',
+    'surge-up':     '#10b981',
+    'surge-down':   '#ef4444',
+    'unusual':      '#94a3b8',
+  };
+  const sigColor = sigColors[r.signal_cls] || '#94a3b8';
+
+  const emaPos = r.above_e20 && r.above_e50 ? '▲ EMA20+50'
+               : r.above_e20               ? '▲ EMA20'
+               : r.above_e50               ? '▲ EMA50'
+               : '▼ Below';
+  const emaCls = (r.above_e20 || r.above_e50) ? 'ema-above' : 'ema-below';
+
+  const rsiCls = r.rsi >= 70 ? 'rsi-hot'
+               : r.rsi <= 30 ? 'rsi-cold'
+               : '';
+
+  return `
+    <tr class="vs-row" onclick="openChart('${r.tv_symbol}','${r.name}')">
+      <td class="vs-sym">
+        <span class="vs-sym-txt">${r.symbol}</span>
+        <span class="vs-tier">${tierLabel}</span>
+      </td>
+      <td class="vs-name" title="${r.name}">${r.name.length > 22 ? r.name.slice(0,20)+'…' : r.name}</td>
+      <td class="ta-r vs-price">$${r.price.toFixed(2)}</td>
+      <td class="ta-r vs-chg ${chgCls}">${chgSign}${r.change_pct.toFixed(2)}%</td>
+      <td class="ta-r vs-vol">
+        <span class="vs-vol-now">${volFmt}</span>
+        <span class="vs-vol-avg">avg ${avgFmt}</span>
+      </td>
+      <td class="ta-r vs-rvol"><strong>${r.rel_vol}×</strong></td>
+      <td class="ta-r vs-rsi ${rsiCls}">${r.rsi.toFixed(1)}</td>
+      <td><span class="vs-sig-badge" style="background:${sigColor}20;color:${sigColor};border:1px solid ${sigColor}40">${r.signal}</span></td>
+      <td><span class="vs-ema-badge ${emaCls}">${emaPos}</span></td>
+      <td class="vs-sector">${r.sector}</td>
+      <td><button class="vs-chart-btn" onclick="event.stopPropagation();openChart('${r.tv_symbol}','${r.name}')">📈</button></td>
+    </tr>`;
+}
+
+function _fmtVol(v) {
+  if (!v) return '—';
+  if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
+  return v.toString();
+}

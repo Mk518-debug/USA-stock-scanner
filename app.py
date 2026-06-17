@@ -800,6 +800,43 @@ def options_data():
         return jsonify({'error': err, 'symbol': symbol}), 500
 
 
+@app.route('/api/volume-surge', methods=['POST'])
+def volume_surge():
+    data          = request.get_json(force=True) or {}
+    min_vol_ratio = float(data.get('min_vol_ratio', 2.0) or 2.0)
+    min_price     = float(data.get('min_price',     5.0) or 5.0)
+    min_avg_vol   = int(data.get('min_avg_vol', 300_000)  or 300_000)
+    market_cap    = data.get('market_cap', 'all')
+    force         = data.get('force', False)
+
+    cache_key = f'volsurge|{min_vol_ratio}|{min_price}|{min_avg_vol}|{market_cap}'
+    if not force:
+        cached = _cache.get(cache_key)
+        if cached and time.time() - cached['ts'] < 300:   # 5-min cache
+            cached['data']['from_cache'] = True
+            return jsonify(cached['data'])
+
+    try:
+        from volume_surge import scan_volume_surge
+        results = scan_volume_surge(
+            min_vol_ratio=min_vol_ratio,
+            min_price=min_price,
+            min_avg_vol=min_avg_vol,
+            market_cap=market_cap,
+        )
+        payload = {
+            'results':    results,
+            'total':      len(results),
+            'timestamp':  ny_time(),
+            'from_cache': False,
+        }
+        _cset(cache_key, payload)
+        return jsonify(payload)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'results': [], 'total': 0}), 500
+
+
 @app.route('/api/sectors')
 def sectors():
     return jsonify(SECTORS)
