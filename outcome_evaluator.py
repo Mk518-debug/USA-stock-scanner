@@ -139,7 +139,7 @@ def _eval_one(conn, sig_id, symbol, timeframe, direction, entry, tp1, tp2, stop,
         (
             sig_id, symbol, direction, entry, round(exit_price, 4),
             round(return_pct, 2), hit_tp1, hit_tp2, hit_stop,
-            outcome, datetime.now(timezone.utc), EVAL_DAYS,
+            outcome, datetime.now(timezone.utc), eval_days,
         ),
     )
     cur.close()

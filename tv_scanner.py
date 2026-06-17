@@ -65,6 +65,39 @@ def _strength(v):
     else:          return int(a * 150)                           # 0 – 15
 
 
+def _tv_ema_score(price, e20, e50, e200):
+    """Compute EMA score 8-92 matching scanner.py logic."""
+    above_e20  = bool(price and e20  and price > e20)
+    above_e50  = bool(price and e50  and price > e50)
+    above_e200 = bool(price and e200 and price > e200)
+    e20_gt_e50 = bool(e20  and e50  and e20  > e50)
+    if   above_e20 and above_e50 and above_e200 and e20_gt_e50: return 88
+    elif above_e20 and above_e50 and e20_gt_e50:                return 75
+    elif above_e20 and above_e50:                               return 62
+    elif above_e20:                                             return 52
+    elif not above_e20 and not above_e50 and not above_e200:   return 12
+    elif not above_e20 and not above_e50:                      return 25
+    return 38
+
+
+def _tv_macd_score(macd, msig):
+    """Compute MACD score 20-80 matching scanner.py histogram logic."""
+    if   macd > msig and macd > 0: return 80
+    elif macd > msig:              return 60
+    elif macd < msig and macd < 0: return 20
+    return 40
+
+
+def _tv_rsi_score(rsi):
+    """Compute RSI score 25-75 from raw RSI value."""
+    if   rsi >= 70: return 75
+    elif rsi >= 60: return 65
+    elif rsi >= 50: return 55
+    elif rsi >= 40: return 45
+    elif rsi >= 30: return 35
+    return 25
+
+
 def _tv_votes(c, e20, e50, e200, ml, ms, r, vr, adx, pdi, ndi, rec, bb_mid,
               htf_e20, htf_e50, htf_c):
     """
@@ -463,11 +496,11 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
             'volatility_d':   0.0,
             'last_candle':   'Real-time',
             'source':        'TradingView',
-            'ema_score':     75 if (price and e20 and e50 and price > e20 > e50) else 25,
-            'macd_score':    72 if macd > msig else 28,
-            'rsi_score':     50,
-            'vol_score':     75 if vr >= 1.5 else 45,
-            'composite':     round((rec + 1) / 2 * 100, 1) if rec is not None else 50,
+            'ema_score':     _tv_ema_score(price, e20, e50, e200),
+            'macd_score':    _tv_macd_score(macd, msig),
+            'rsi_score':     _tv_rsi_score(rsi),
+            'vol_score':     90 if vr >= 2.0 else 75 if vr >= 1.5 else 55 if vr >= 1.0 else 38 if vr >= 0.7 else 20,
+            'composite':     round(float(strength), 1),
             'regime_score':  50,
         })
 

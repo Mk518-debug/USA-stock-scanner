@@ -10,18 +10,20 @@ _MIN_SAMPLES = 30
 
 # Default weights (mirrors scanner.py — single source of truth via get_weights())
 _DEFAULT_WEIGHTS = {
-    '1d':  {'ema': 0.22, 'macd': 0.25, 'rsi': 0.18, 'vol': 0.12,
-             'regime': 0.10, 'st': 0.08, 'stoch': 0.04, 'mom': 0.01},
-    '4h':  {'ema': 0.17, 'macd': 0.27, 'rsi': 0.20, 'vol': 0.15,
-             'regime': 0.08, 'st': 0.07, 'stoch': 0.04, 'mom': 0.02},
-    '1h':  {'ema': 0.10, 'macd': 0.30, 'rsi': 0.24, 'vol': 0.18,
-             'regime': 0.05, 'st': 0.06, 'stoch': 0.05, 'mom': 0.02},
-    '15m': {'ema': 0.06, 'macd': 0.32, 'rsi': 0.26, 'vol': 0.20,
-             'regime': 0.03, 'st': 0.06, 'stoch': 0.05, 'mom': 0.02},
-    '1w':  {'ema': 0.28, 'macd': 0.20, 'rsi': 0.14, 'vol': 0.10,
-             'regime': 0.14, 'st': 0.08, 'stoch': 0.04, 'mom': 0.02},
-    '1mo': {'ema': 0.32, 'macd': 0.18, 'rsi': 0.12, 'vol': 0.08,
-             'regime': 0.16, 'st': 0.07, 'stoch': 0.04, 'mom': 0.03},
+    # 'div' (divergence) added as proper weighted indicator.
+    # Each timeframe takes 0.03 from 'macd' to keep the total at 1.00.
+    '1d':  {'ema': 0.22, 'macd': 0.22, 'rsi': 0.18, 'vol': 0.12,
+             'regime': 0.10, 'st': 0.08, 'stoch': 0.04, 'mom': 0.01, 'div': 0.03},
+    '4h':  {'ema': 0.17, 'macd': 0.24, 'rsi': 0.20, 'vol': 0.15,
+             'regime': 0.08, 'st': 0.07, 'stoch': 0.04, 'mom': 0.02, 'div': 0.03},
+    '1h':  {'ema': 0.10, 'macd': 0.27, 'rsi': 0.24, 'vol': 0.18,
+             'regime': 0.05, 'st': 0.06, 'stoch': 0.05, 'mom': 0.02, 'div': 0.03},
+    '15m': {'ema': 0.06, 'macd': 0.29, 'rsi': 0.26, 'vol': 0.20,
+             'regime': 0.03, 'st': 0.06, 'stoch': 0.05, 'mom': 0.02, 'div': 0.03},
+    '1w':  {'ema': 0.28, 'macd': 0.17, 'rsi': 0.14, 'vol': 0.10,
+             'regime': 0.14, 'st': 0.08, 'stoch': 0.04, 'mom': 0.02, 'div': 0.03},
+    '1mo': {'ema': 0.32, 'macd': 0.15, 'rsi': 0.12, 'vol': 0.08,
+             'regime': 0.16, 'st': 0.07, 'stoch': 0.04, 'mom': 0.03, 'div': 0.03},
 }
 
 

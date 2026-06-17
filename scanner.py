@@ -483,10 +483,8 @@ def analyze(symbol, timeframe='1d'):
         else:                                    stoch_sc = 50
 
         # ── Divergence ───────────────────────────────────────────────────────
-        div = detect_divergence(close, rsi_s)
-        div_adj = 0
-        if   div == 'bullish': div_adj = +8
-        elif div == 'bearish': div_adj = -8
+        div    = detect_divergence(close, rsi_s)
+        div_sc = 75 if div == 'bullish' else 25 if div == 'bearish' else 50
 
         # ── Relative strength vs SPY ─────────────────────────────────────────
         if len(close) >= 21:
@@ -504,15 +502,15 @@ def analyze(symbol, timeframe='1d'):
         # ── Composite score (per-timeframe weights) ───────────────────────────
         w = _get_weights(timeframe)
         composite = (
-            w['ema']    * ema_sc
-            + w['macd'] * macd_sc
-            + w['rsi']  * rsi_sc
-            + w['vol']  * vol_sc
-            + w['regime'] * regime_sc
-            + w['st']   * st_sc
-            + w['stoch'] * stoch_sc
-            + w['mom']  * mom_sc
-            + div_adj
+            w['ema']             * ema_sc
+            + w['macd']          * macd_sc
+            + w['rsi']           * rsi_sc
+            + w['vol']           * vol_sc
+            + w['regime']        * regime_sc
+            + w['st']            * st_sc
+            + w['stoch']         * stoch_sc
+            + w['mom']           * mom_sc
+            + w.get('div', 0.03) * div_sc
         )
         composite = max(0, min(100, composite))
 

@@ -108,7 +108,7 @@ def _fetch_flow(symbol: str, price: float):
                     for _, row in df.iterrows():
                         vol = float(row['volume'])
                         oi  = float(row['openInterest'])
-                        if vol < 500 or oi == 0:
+                        if vol < 500 or oi <= 0:
                             continue
                         ratio = vol / oi
                         if ratio < 2.0:

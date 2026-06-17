@@ -644,12 +644,12 @@ function buildCard(r) {
   const atr   = r.atr || 0;
   const mult  = r.direction==='Bullish'?1:-1;
 
-  // AB.SK targets: Stop=5×ATR, G1=2.5×ATR, G2=5×ATR, G3=7.5×ATR
+  // Swing targets: Stop=2.5×ATR, G1=3×ATR, G2=5×ATR, G3=8×ATR
   const entry = r.entry || r.price;
-  const stop  = r.stop  != null ? r.stop  : (atr ? (entry - mult*5.0*atr).toFixed(4) : '');
-  const t1    = r.tp1   != null ? r.tp1   : (atr ? (entry + mult*2.5*atr).toFixed(4) : '');
+  const stop  = r.stop  != null ? r.stop  : (atr ? (entry - mult*2.5*atr).toFixed(4) : '');
+  const t1    = r.tp1   != null ? r.tp1   : (atr ? (entry + mult*3.0*atr).toFixed(4) : '');
   const t2    = r.tp2   != null ? r.tp2   : (atr ? (entry + mult*5.0*atr).toFixed(4) : '');
-  const t3    = r.tp3   != null ? r.tp3   : (atr ? (entry + mult*7.5*atr).toFixed(4) : '');
+  const t3    = r.tp3   != null ? r.tp3   : (atr ? (entry + mult*8.0*atr).toFixed(4) : '');
   const dist  = t2 ? Math.abs(((parseFloat(t2)-entry)/entry)*100).toFixed(2) : '—';
 
   // Votes
@@ -886,12 +886,11 @@ function calcTargets(symbol, atr, direction) {
   const entry = parseFloat(document.getElementById(`en_${symbol}`)?.value);
   if (!entry || !atr) return;
   const m = direction === 'Bullish' ? 1 : -1;
-  // AB.SK formula: Stop=5×ATR, G1=2.5×ATR, G2=5×ATR, G3=7.5×ATR
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v.toFixed(4); };
-  set(`sl_${symbol}`, entry - m * 5.0 * atr);
-  set(`t1_${symbol}`, entry + m * 2.5 * atr);
+  set(`sl_${symbol}`, entry - m * 2.5 * atr);
+  set(`t1_${symbol}`, entry + m * 3.0 * atr);
   set(`t2_${symbol}`, entry + m * 5.0 * atr);
-  set(`t3_${symbol}`, entry + m * 7.5 * atr);
+  set(`t3_${symbol}`, entry + m * 8.0 * atr);
 
   watchedSet.add(symbol);
   document.getElementById(`card_${symbol}`)?.classList.add('watched');
