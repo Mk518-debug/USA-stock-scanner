@@ -20,6 +20,7 @@ import db
 from signal_logger import log_signals_async
 from outcome_evaluator import evaluate_pending_outcomes, get_learning_stats
 import ml_engine
+import telegram_notify
 
 app = Flask(__name__)
 CORS(app)
@@ -65,8 +66,31 @@ try:
                        hour=19, minute=30, day_of_week='mon-fri',
                        id='auto_scan_afternoon', replace_existing=True)
 
+    # ── Telegram volume surge alerts (Mon–Fri, same times as auto_scan) ──
+    # Runs 2 min after auto_scan so data is fresh; silently skips if
+    # TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID env vars are not set.
+    def _surge_notify_job(label):
+        try:
+            from volume_surge import scan_volume_surge
+            results = scan_volume_surge(min_vol_ratio=2.0, min_price=5.0,
+                                        min_avg_vol=300_000, limit=50)
+            telegram_notify.send_surge_alert(results, label=label)
+        except Exception as _e:
+            print(f'[surge_notify] {_e}')
+
+    _scheduler.add_job(lambda: _surge_notify_job('09:47 ET'), 'cron',
+                       hour=13, minute=47, day_of_week='mon-fri',
+                       id='surge_notify_morning',   replace_existing=True)
+    _scheduler.add_job(lambda: _surge_notify_job('13:02 ET'), 'cron',
+                       hour=17, minute=2,  day_of_week='mon-fri',
+                       id='surge_notify_midday',    replace_existing=True)
+    _scheduler.add_job(lambda: _surge_notify_job('15:32 ET'), 'cron',
+                       hour=19, minute=32, day_of_week='mon-fri',
+                       id='surge_notify_afternoon', replace_existing=True)
+
     _scheduler.start()
-    print('[scheduler] 5 jobs active: 3× auto-scan + eval + ML retrain')
+    tg_status = 'enabled' if telegram_notify.enabled() else 'disabled (no env vars)'
+    print(f'[scheduler] 8 jobs active: 3× auto-scan + 3× surge-notify ({tg_status}) + eval + ML retrain')
 except Exception as _sched_err:
     print(f'[scheduler] APScheduler not available ({_sched_err}) — skipping')
 
@@ -853,6 +877,35 @@ def volume_surge():
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e), 'results': [], 'total': 0}), 500
+
+
+@app.route('/api/notify/test', methods=['POST'])
+def notify_test():
+    """Send a test Telegram message to verify the bot is connected."""
+    if not telegram_notify.enabled():
+        return jsonify({'ok': False,
+                        'error': 'TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set'}), 400
+    ok = telegram_notify.send_message(
+        '✅ <b>USA Stock Scanner</b> — Telegram alerts connected!\n'
+        'You will receive Volume Surge alerts at 09:47, 13:02, and 15:32 ET on trading days.'
+    )
+    return jsonify({'ok': ok})
+
+
+@app.route('/api/notify/surge-now', methods=['POST'])
+def notify_surge_now():
+    """Trigger a surge alert immediately (for manual testing)."""
+    if not telegram_notify.enabled():
+        return jsonify({'ok': False,
+                        'error': 'TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set'}), 400
+    try:
+        from volume_surge import scan_volume_surge
+        results = scan_volume_surge(min_vol_ratio=2.0, min_price=5.0,
+                                    min_avg_vol=300_000, limit=50)
+        telegram_notify.send_surge_alert(results, label='Manual trigger')
+        return jsonify({'ok': True, 'stocks_found': len(results)})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/api/options-flow/scan', methods=['GET', 'POST'])
