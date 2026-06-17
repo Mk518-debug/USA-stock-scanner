@@ -488,18 +488,36 @@ def analyst_rating():
         except Exception:
             pass
 
+    # ── Earnings countdown ──────────────────────────────────────────────────
+    earnings_days = None
+    earnings_date = None
+    try:
+        cal = yf.Ticker(symbol, session=_yf_session()).calendar
+        if cal is not None and not (isinstance(cal, dict) and not cal):
+            if isinstance(cal, dict):
+                ed = cal.get('Earnings Date') or cal.get('earningsDate')
+                if ed:
+                    ed = ed[0] if isinstance(ed, list) else ed
+                    ed = pd.Timestamp(ed).date()
+                    earnings_days = (ed - _date.today()).days
+                    earnings_date = str(ed)
+    except Exception:
+        pass
+
     payload = {
-        'symbol':    symbol,
-        'source':    source,
-        'buy':       buy,
-        'hold':      hold,
-        'sell':      sell,
-        'total':     total,
-        'target':    target,
-        'target_h':  target_h,
-        'target_l':  target_l,
-        'tv_rec':    tv_rec,   # -1→1 technical consensus, always shown if counts unavailable
-        'from_cache': False,
+        'symbol':        symbol,
+        'source':        source,
+        'buy':           buy,
+        'hold':          hold,
+        'sell':          sell,
+        'total':         total,
+        'target':        target,
+        'target_h':      target_h,
+        'target_l':      target_l,
+        'tv_rec':        tv_rec,
+        'earnings_days': earnings_days,
+        'earnings_date': earnings_date,
+        'from_cache':    False,
     }
 
     _cset(cache_key, payload)

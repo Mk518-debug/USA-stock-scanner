@@ -215,6 +215,15 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
         'BB.upper', 'BB.lower', 'BB.basis',
         f'EMA20{sf1}', f'EMA50{sf1}', f'close{sf1}',
         'sector', 'exchange', 'market_cap_basic',
+        # ── Multi-timeframe recommendations (one API call, no extra cost) ──
+        'Recommend.All',       # 1D always
+        'Recommend.All|15',    # 15M
+        'Recommend.All|60',    # 1H
+        'Recommend.All|240',   # 4H
+        # ── 52-week range ─────────────────────────────────────────────────
+        'price_52_week_high', 'price_52_week_low',
+        # ── Gap detection ─────────────────────────────────────────────────
+        'open',
     ]
 
     # Base market cap floor (overridden by market_cap param)
@@ -342,12 +351,52 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
             if width < 4.0:
                 bb_squeeze = 80  # approximate
 
-        # Build patterns list
+        # ── Multi-Timeframe recommendations ──────────────────────────────────
+        rec_15m = cm.get('Recommend.All|15')
+        rec_1h  = cm.get('Recommend.All|60')
+        rec_4h  = cm.get('Recommend.All|240')
+        rec_1d  = cm.get('Recommend.All')
+
+        def _tf_dir(v):
+            if v is None:   return 'neutral'
+            if v >= 0.1:    return 'bull'
+            if v <= -0.1:   return 'bear'
+            return 'neutral'
+
+        mtf_15m = _tf_dir(rec_15m)
+        mtf_1h  = _tf_dir(rec_1h)
+        mtf_4h  = _tf_dir(rec_4h)
+        mtf_1d  = _tf_dir(rec_1d)
+
+        mtf_bull_count = sum(1 for d in [mtf_15m, mtf_1h, mtf_4h, mtf_1d] if d == 'bull')
+        mtf_bear_count = sum(1 for d in [mtf_15m, mtf_1h, mtf_4h, mtf_1d] if d == 'bear')
+
+        # ── 52-Week Range ─────────────────────────────────────────────────────
+        high52  = cm.get('price_52_week_high')
+        low52   = cm.get('price_52_week_low')
+        week52_pos = None
+        if high52 and low52 and high52 > low52 and price:
+            week52_pos = round((price - low52) / (high52 - low52) * 100, 1)
+
+        # ── Gap at Open ───────────────────────────────────────────────────────
+        open_p      = cm.get('open') or price
+        change_abs  = cm.get('change_abs') or 0
+        prev_close  = price - change_abs if change_abs else price
+        gap_pct     = round((open_p - prev_close) / prev_close * 100, 2) if prev_close > 0 else 0
+
+        # ── Build patterns list ───────────────────────────────────────────────
         patterns = []
         if adx_val > 20 and pdi > ndi:   patterns.append('ADX Bullish')
         if adx_val > 20 and ndi > pdi:   patterns.append('ADX Bearish')
         if bb_squeeze >= 70:              patterns.append(f'BB Squeeze {bb_squeeze}%')
         if vr >= 1.5:                     patterns.append(f'Vol +{int((vr-1)*100)}%')
+        if mtf_bull_count >= 4:           patterns.append('4/4 TF Aligned ▲')
+        elif mtf_bull_count == 3:         patterns.append('3/4 TF Aligned ▲')
+        if mtf_bear_count >= 4:           patterns.append('4/4 TF Aligned ▼')
+        if week52_pos is not None and week52_pos >= 90: patterns.append('Near 52W High 🚀')
+        if week52_pos is not None and week52_pos <= 10: patterns.append('Near 52W Low 🔻')
+        if gap_pct >= 2.0:                patterns.append(f'Gap Up +{gap_pct}%')
+        elif gap_pct <= -2.0:             patterns.append(f'Gap Down {gap_pct}%')
 
         results.append({
             'symbol':        sym,
@@ -395,6 +444,18 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
             'mtf_align':     htf_ema_dir,
             'divergence':    None,
             'patterns':      patterns,
+            # ── New enrichment fields ───────────────────────────────────────
+            'mtf_15m':       mtf_15m,
+            'mtf_1h':        mtf_1h,
+            'mtf_4h':        mtf_4h,
+            'mtf_1d':        mtf_1d,
+            'mtf_bull_count': mtf_bull_count,
+            'mtf_bear_count': mtf_bear_count,
+            'week52_high':   round(high52, 2) if high52 else None,
+            'week52_low':    round(low52,  2) if low52  else None,
+            'week52_pos':    week52_pos,
+            'gap_pct':       gap_pct,
+            'open_price':    round(open_p, 4),
             'rs_20':         None,
             'support':       round(bb_lower, 4) if bb_lower else round(price * 0.95, 4),
             'resistance':    round(bb_upper, 4) if bb_upper else round(price * 1.05, 4),

@@ -667,6 +667,29 @@ function buildCard(r) {
   const htfCls  = htfBull ? 'bull' : htfBear ? 'bear' : '';
   const htfLbl  = htfBull ? '↑ Bullish' : htfBear ? '↓ Bearish' : '↔ Mixed';
 
+  // ── Multi-Timeframe heatmap ─────────────────────────────────────────────
+  const mtfData  = [
+    { tf:'15M', cls: r.mtf_15m || 'neutral' },
+    { tf:'1H',  cls: r.mtf_1h  || 'neutral' },
+    { tf:'4H',  cls: r.mtf_4h  || 'neutral' },
+    { tf:'1D',  cls: r.mtf_1d  || 'neutral' },
+  ];
+  const mtfBulls = (r.mtf_bull_count != null) ? r.mtf_bull_count
+                 : mtfData.filter(m => m.cls === 'bull').length;
+  const mtfBears = (r.mtf_bear_count != null) ? r.mtf_bear_count
+                 : mtfData.filter(m => m.cls === 'bear').length;
+  const hasMtf   = r.mtf_15m || r.mtf_1h || r.mtf_4h || r.mtf_1d;
+
+  // ── 52-Week range bar ───────────────────────────────────────────────────
+  const w52pos   = r.week52_pos;
+  const w52high  = r.week52_high;
+  const w52low   = r.week52_low;
+  const has52w   = w52pos != null;
+
+  // ── Gap at open ─────────────────────────────────────────────────────────
+  const gapPct   = r.gap_pct || 0;
+  const hasGap   = Math.abs(gapPct) >= 1.5;
+
   // ADX
   const adx    = r.adx || 0;
   const adxDiCls = adx >= 25 ? ((r.adx_plus_di||0) > (r.adx_minus_di||0) ? 'bull' : 'bear') : '';
@@ -802,6 +825,37 @@ function buildCard(r) {
   <div class="sk-sr-row">
     <span class="sr-item support">▲ S: $${parseFloat(r.support||0).toFixed(2)}</span>
     <span class="sr-item resistance">▼ R: $${parseFloat(r.resistance||0).toFixed(2)}</span>
+  </div>` : ''}
+
+  <!-- ─── Multi-Timeframe Heatmap ─── -->
+  ${hasMtf ? `
+  <div class="mtf-row">
+    <span class="mtf-label">MTF</span>
+    ${mtfData.map(m => `<span class="mtf-dot ${m.cls}">${m.tf}</span>`).join('')}
+    <span class="mtf-score ${mtfBulls >= 3 ? 'bull' : mtfBears >= 3 ? 'bear' : ''}">${
+      mtfBulls >= 3 ? `${mtfBulls}/4 ▲` : mtfBears >= 3 ? `${mtfBears}/4 ▼` : `${mtfBulls}▲ ${mtfBears}▼`
+    }</span>
+  </div>` : ''}
+
+  <!-- ─── 52-Week Range Bar ─── -->
+  ${has52w ? `
+  <div class="w52-row">
+    <span class="w52-label">52W</span>
+    <span class="w52-low">$${w52low}</span>
+    <div class="w52-track">
+      <div class="w52-fill ${w52pos >= 80 ? 'hot' : w52pos <= 20 ? 'cold' : ''}" style="width:${w52pos}%"></div>
+      <div class="w52-cursor" style="left:${w52pos}%"></div>
+    </div>
+    <span class="w52-high">$${w52high}</span>
+    <span class="w52-pct ${w52pos >= 80 ? 'bull' : w52pos <= 20 ? 'bear' : ''}">${w52pos}%</span>
+  </div>` : ''}
+
+  <!-- ─── Gap Badge ─── -->
+  ${hasGap ? `
+  <div class="gap-badge-row">
+    <span class="gap-badge ${gapPct > 0 ? 'gap-up' : 'gap-down'}">
+      ${gapPct > 0 ? '↑' : '↓'} Gap ${gapPct > 0 ? '+' : ''}${gapPct.toFixed(2)}% at open
+    </span>
   </div>` : ''}
 
   <!-- ─── Signal timestamp ─── -->

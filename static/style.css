@@ -1144,3 +1144,126 @@ body.light .analyst-toggle:hover { background: rgba(0,0,0,.03); }
   .vs-name, .vs-sector { display: none; }
   .vs-table { font-size: .78rem; }
 }
+
+/* ════════════════════════════════════════════════════════
+   MTF Heatmap Row
+════════════════════════════════════════════════════════ */
+.mtf-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 0 2px;
+  flex-wrap: wrap;
+}
+.mtf-label {
+  font-size: .65rem;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-right: 2px;
+  font-weight: 600;
+  min-width: 26px;
+}
+.mtf-dot {
+  font-size: .65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.mtf-dot.bull    { background: rgba(34,197,94,.15);  color: #22c55e; border: 1px solid rgba(34,197,94,.3); }
+.mtf-dot.bear    { background: rgba(239,68,68,.15);  color: #ef4444; border: 1px solid rgba(239,68,68,.3); }
+.mtf-dot.neutral { background: rgba(148,163,184,.1); color: var(--text3); border: 1px solid var(--border); }
+.mtf-score {
+  font-size: .68rem;
+  font-weight: 700;
+  margin-left: 3px;
+  color: var(--text3);
+}
+.mtf-score.bull { color: #22c55e; }
+.mtf-score.bear { color: #ef4444; }
+
+/* ════════════════════════════════════════════════════════
+   52-Week Range Bar
+════════════════════════════════════════════════════════ */
+.w52-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 2px;
+  font-size: .68rem;
+}
+.w52-label {
+  font-size: .65rem;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 600;
+  min-width: 26px;
+}
+.w52-low, .w52-high {
+  color: var(--text3);
+  white-space: nowrap;
+  font-size: .67rem;
+}
+.w52-track {
+  flex: 1;
+  position: relative;
+  height: 6px;
+  background: var(--bg3);
+  border-radius: 3px;
+  overflow: visible;
+  min-width: 60px;
+}
+.w52-fill {
+  position: absolute;
+  left: 0; top: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--blue);
+  transition: width .3s;
+  max-width: 100%;
+}
+.w52-fill.hot  { background: linear-gradient(90deg, var(--blue), #f59e0b); }
+.w52-fill.cold { background: linear-gradient(90deg, #64748b, var(--blue)); }
+.w52-cursor {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 12px;
+  background: #fff;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 4px rgba(0,0,0,.5);
+}
+.w52-pct {
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--text2);
+  white-space: nowrap;
+  min-width: 32px;
+  text-align: right;
+}
+.w52-pct.bull { color: #f59e0b; }
+.w52-pct.bear { color: var(--blue); }
+
+/* ════════════════════════════════════════════════════════
+   Gap Badge
+════════════════════════════════════════════════════════ */
+.gap-badge-row {
+  margin: 5px 0 2px;
+}
+.gap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+  letter-spacing: .02em;
+}
+.gap-badge.gap-up   { background: rgba(34,197,94,.12);  color: #22c55e; border: 1px solid rgba(34,197,94,.25); }
+.gap-badge.gap-down { background: rgba(239,68,68,.12);  color: #ef4444; border: 1px solid rgba(239,68,68,.25); }
