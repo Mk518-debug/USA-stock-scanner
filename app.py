@@ -855,6 +855,34 @@ def volume_surge():
         return jsonify({'error': str(e), 'results': [], 'total': 0}), 500
 
 
+@app.route('/api/options-flow/scan', methods=['GET', 'POST'])
+def options_flow_scan():
+    data  = request.get_json(force=True, silent=True) or {}
+    force = bool(data.get('force', False))
+
+    cache_key = 'optflow_scan'
+    if not force:
+        cached = _cache.get(cache_key)
+        if cached and time.time() - cached['ts'] < 900:
+            cached['data']['from_cache'] = True
+            return jsonify(cached['data'])
+
+    try:
+        from options_flow import scan_options_flow
+        results = scan_options_flow(force=force)
+        payload = {
+            'results':    results,
+            'total':      len(results),
+            'timestamp':  ny_time(),
+            'from_cache': False,
+        }
+        _cset(cache_key, payload)
+        return jsonify(payload)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'results': [], 'total': 0}), 500
+
+
 @app.route('/api/sectors')
 def sectors():
     return jsonify(SECTORS)

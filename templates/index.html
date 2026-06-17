@@ -90,6 +90,7 @@
           <button class="ftab" data-tab="open"           role="tab" aria-selected="false">📌 Watching</button>
           <button class="ftab ftab-news"    data-tab="news"       role="tab" aria-selected="false">📰 News</button>
           <button class="ftab ftab-surge"   data-tab="surge"      role="tab" aria-selected="false">⚡ Vol Surge</button>
+          <button class="ftab ftab-flow"    data-tab="flow"       role="tab" aria-selected="false">📣 Options Flow</button>
         </div>
         <div class="filter-right">
           <input id="cardSearch" class="card-search" type="text" placeholder="🔍 Search stocks…"
@@ -203,6 +204,55 @@
           </thead>
           <tbody id="vsSurgeBody">
             <tr><td colspan="11" class="vs-empty">Click ⚡ Vol Surge to load</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ══ OPTIONS FLOW — sibling of #scannerPanel ══ -->
+    <div id="optionsFlowArea" style="display:none; flex:1; min-height:0; overflow-y:auto; padding:16px;">
+
+      <!-- Filters bar -->
+      <div class="vs-bar">
+        <div class="vs-filters">
+          <div class="vs-filter-group">
+            <span class="vs-filter-label">Flow Type</span>
+            <div class="seg-group" id="ofTypeGroup">
+              <button class="seg-btn active" data-flow="all">All</button>
+              <button class="seg-btn" data-flow="bullish">📣 Bullish</button>
+              <button class="seg-btn" data-flow="bearish">🐻 Bearish</button>
+              <button class="seg-btn" data-flow="sweep">⚡ Sweeps</button>
+            </div>
+          </div>
+        </div>
+        <div class="vs-bar-right">
+          <span class="vs-count" id="ofFlowCount"></span>
+          <span class="vs-ts"   id="ofFlowTs"></span>
+          <button class="refresh-btn" onclick="fetchOptionsFlow(true)">↺ Refresh</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="vs-table-wrap">
+        <table class="vs-table" id="ofFlowTable">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Name</th>
+              <th class="ta-r">Price</th>
+              <th class="ta-r">Chg%</th>
+              <th class="ta-r">Call Vol</th>
+              <th class="ta-r">Put Vol</th>
+              <th class="ta-r">PCR</th>
+              <th>Flow Signal</th>
+              <th class="ta-r">Sweep ×</th>
+              <th>Sector</th>
+              <th>Chart</th>
+            </tr>
+          </thead>
+          <tbody id="ofFlowBody">
+            <tr><td colspan="11" class="vs-empty">Click 📣 Options Flow to load</td></tr>
           </tbody>
         </table>
       </div>

@@ -1267,3 +1267,42 @@ body.light .analyst-toggle:hover { background: rgba(0,0,0,.03); }
 }
 .gap-badge.gap-up   { background: rgba(34,197,94,.12);  color: #22c55e; border: 1px solid rgba(34,197,94,.25); }
 .gap-badge.gap-down { background: rgba(239,68,68,.12);  color: #ef4444; border: 1px solid rgba(239,68,68,.25); }
+
+/* ════════════════════════════════════════════════════════
+   Options Flow — Sweep Banner (inside existing options panel)
+════════════════════════════════════════════════════════ */
+.sweep-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: .75rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: .02em;
+}
+.sweep-banner.bullish { background: rgba(34,197,94,.12);  color: #22c55e; border: 1px solid rgba(34,197,94,.3); }
+.sweep-banner.bearish { background: rgba(239,68,68,.12);  color: #ef4444; border: 1px solid rgba(239,68,68,.3); }
+.sweep-banner.mixed   { background: rgba(245,158,11,.12); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); }
+
+/* ════════════════════════════════════════════════════════
+   Options Flow — Sweep ratio badge (in the flow table)
+════════════════════════════════════════════════════════ */
+.of-sweep-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: .70rem;
+  font-weight: 700;
+  background: rgba(245,158,11,.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245,158,11,.3);
+  white-space: nowrap;
+}
+
+/* ════════════════════════════════════════════════════════
+   Options Flow tab highlight
+════════════════════════════════════════════════════════ */
+.ftab-flow { border-color: #a78bfa !important; }
+.ftab-flow.active { background: #a78bfa !important; color: #000 !important; }

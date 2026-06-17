@@ -13,7 +13,7 @@ function fitScrollZones() {
   const stickyH = sticky  ? sticky.offsetHeight  : 0;
   const scrollH = Math.max(100, winH - headerH - stickyH);
 
-  ['cardsArea','newsArea','volumeSurgeArea','reportArea','screenArea'].forEach(id => {
+  ['cardsArea','newsArea','volumeSurgeArea','optionsFlowArea','reportArea','screenArea'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.height = scrollH + 'px';
   });
@@ -220,11 +220,13 @@ document.querySelectorAll('.ftab').forEach(tab => {
     const scannerEl = document.getElementById('scannerPanel');
     const newsEl    = document.getElementById('newsArea');
     const surgeEl   = document.getElementById('volumeSurgeArea');
+    const flowEl    = document.getElementById('optionsFlowArea');
 
     // Hide all top-level content panels
     if (scannerEl) scannerEl.style.display = 'none';
     if (newsEl)    newsEl.style.display    = 'none';
     if (surgeEl)   surgeEl.style.display   = 'none';
+    if (flowEl)    flowEl.style.display    = 'none';
 
     if (activeTab === 'news') {
       if (newsEl) newsEl.style.display = '';
@@ -232,6 +234,9 @@ document.querySelectorAll('.ftab').forEach(tab => {
     } else if (activeTab === 'surge') {
       if (surgeEl) surgeEl.style.display = '';
       fetchVolumeSurge();
+    } else if (activeTab === 'flow') {
+      if (flowEl) flowEl.style.display = '';
+      fetchOptionsFlow();
     } else {
       if (scannerEl) scannerEl.style.display = '';
       render();
@@ -1220,6 +1225,16 @@ function _buildOptionsPanel(d, price) {
   const uoaAll = [...(d.uoa_calls||[]), ...(d.uoa_puts||[])]
     .sort((a,b) => b.vol_oi - a.vol_oi).slice(0,6);
 
+  // Sweep detection banner
+  const callSweep = (d.uoa_calls||[]).some(u => u.vol_oi >= 3);
+  const putSweep  = (d.uoa_puts||[]).some(u => u.vol_oi >= 3);
+  const sweepBanner = (callSweep || putSweep) ? `
+  <div class="sweep-banner ${callSweep && !putSweep ? 'bullish' : putSweep && !callSweep ? 'bearish' : 'mixed'}">
+    ${callSweep && !putSweep ? '📣 Call Sweep Detected — Institutional Buying'
+    : putSweep && !callSweep ? '🐻 Put Sweep Detected — Institutional Hedging'
+    : '⚡ Mixed Sweeps — Heavy Institutional Activity'}
+  </div>` : '';
+
   const uoaHTML = uoaAll.length ? `
   <div class="opt-sec-title">Unusual Options Activity</div>
   <div class="opt-uoa-table">
@@ -1268,6 +1283,8 @@ function _buildOptionsPanel(d, price) {
 
   return `
 <div class="opt-wrap">
+
+  ${sweepBanner}
 
   <!-- Header: expiry + signal -->
   <div class="opt-header">
@@ -1762,4 +1779,98 @@ function _fmtVol(v) {
   if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
   if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
   return v.toString();
+}
+
+// ── Options Flow Tab ──────────────────────────────────────────────────────────
+let _flowResults = [];
+let _flowLastTs  = '';
+
+document.querySelectorAll('#ofTypeGroup .seg-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#ofTypeGroup .seg-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    renderOptionsFlow();
+  });
+});
+
+async function fetchOptionsFlow(force = false) {
+  const tbody = document.getElementById('ofFlowBody');
+  if (!force && _flowResults.length) { renderOptionsFlow(); return; }
+
+  if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="vs-empty">Scanning options flow — this may take 15-30s…</td></tr>';
+
+  try {
+    const res  = await fetch('/api/options-flow/scan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ force }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    _flowResults = data.results || [];
+    _flowLastTs  = data.timestamp || '';
+    renderOptionsFlow();
+  } catch(e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="11" class="vs-empty" style="color:var(--red)">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderOptionsFlow() {
+  const typeFilter = document.querySelector('#ofTypeGroup .seg-btn.active')?.dataset.flow || 'all';
+  const tbody      = document.getElementById('ofFlowBody');
+  const countEl    = document.getElementById('ofFlowCount');
+  const tsEl       = document.getElementById('ofFlowTs');
+
+  let rows = _flowResults;
+  if (typeFilter === 'bullish') rows = rows.filter(r => r.flow_cls === 'bullish');
+  else if (typeFilter === 'bearish') rows = rows.filter(r => r.flow_cls === 'bearish');
+  else if (typeFilter === 'sweep')   rows = rows.filter(r => r.flow_type?.includes('sweep'));
+
+  if (countEl) countEl.textContent = `${rows.length} stocks`;
+  if (tsEl)    tsEl.textContent    = _flowLastTs;
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="11" class="vs-empty">No unusual options activity found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => _buildFlowRow(r)).join('');
+}
+
+function _buildFlowRow(r) {
+  const chgCls  = r.change_pct >= 0 ? 'pos' : 'neg';
+  const chgSign = r.change_pct >= 0 ? '+' : '';
+  const tvSym   = `${r.exchange || 'NASDAQ'}:${r.symbol}`;
+
+  const flowColors = {
+    call_sweep: '#22c55e',
+    call_bias:  '#4ade80',
+    put_sweep:  '#ef4444',
+    put_bias:   '#f87171',
+    mixed:      '#f59e0b',
+  };
+  const flowColor = flowColors[r.flow_type] || '#94a3b8';
+
+  const pcrCls = r.pcr < 0.7 ? 'bull' : r.pcr > 1.3 ? 'bear' : '';
+
+  const sweepBadge = r.top_sweep_ratio >= 3
+    ? `<span class="of-sweep-badge">${r.top_sweep_ratio}×</span>`
+    : `<span style="color:var(--text3);font-size:.72rem">—</span>`;
+
+  return `
+    <tr class="vs-row" onclick="openChart('${tvSym}','${r.name}')">
+      <td class="vs-sym">
+        <span class="vs-sym-txt">${r.symbol}</span>
+        <span class="vs-tier">${r.exchange || ''}</span>
+      </td>
+      <td class="vs-name" title="${r.name}">${r.name.length > 22 ? r.name.slice(0,20)+'…' : r.name}</td>
+      <td class="ta-r vs-price">$${r.price.toFixed(2)}</td>
+      <td class="ta-r vs-chg ${chgCls}">${chgSign}${r.change_pct.toFixed(2)}%</td>
+      <td class="ta-r" style="color:var(--green);font-weight:600">${_fmtVol(r.call_vol)}</td>
+      <td class="ta-r" style="color:var(--red);font-weight:600">${_fmtVol(r.put_vol)}</td>
+      <td class="ta-r vs-rsi ${pcrCls}">${r.pcr}</td>
+      <td><span class="vs-sig-badge" style="background:${flowColor}20;color:${flowColor};border:1px solid ${flowColor}40">${r.flow_label}</span></td>
+      <td class="ta-r">${sweepBadge}</td>
+      <td class="vs-sector">${r.sector || '—'}</td>
+      <td><button class="vs-chart-btn" onclick="event.stopPropagation();openChart('${tvSym}','${r.name}')">📈</button></td>
+    </tr>`;
 }
