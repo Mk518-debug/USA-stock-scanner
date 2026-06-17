@@ -863,13 +863,6 @@ function buildCard(r) {
     </span>
   </div>` : ''}
 
-  <!-- ─── Signal timestamp ─── -->
-  <div class="card-signal-time">
-    <span class="cst-icon">🕐</span>
-    <span class="cst-label">Signal: </span>
-    <span class="cst-val">${r.scan_time || r.last_candle || '—'}</span>
-  </div>
-
   <!-- ─── Footer ─── -->
   <div class="card-footer">
     <button class="cf-btn danger" onclick="dismissCard('${r.symbol}')" title="Dismiss" aria-label="Dismiss ${r.symbol}">✕</button>
