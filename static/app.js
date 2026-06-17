@@ -691,9 +691,17 @@ function buildCard(r) {
   const w52low   = r.week52_low;
   const has52w   = w52pos != null;
 
+  // ── EMA8 status ─────────────────────────────────────────────────────────
+  const hasE8    = r.ema8 != null;
+  const e8riding = r.ema8_riding;
+  const e8ext    = r.ema8_extended;
+  const e8above  = r.above_ema8;
+  const e8pct    = r.ema8_pct;
+
   // ── Gap at open ─────────────────────────────────────────────────────────
   const gapPct   = r.gap_pct || 0;
   const hasGap   = Math.abs(gapPct) >= 1.5;
+  const bigGap   = Math.abs(gapPct) >= 3.0;
 
   // ADX
   const adx    = r.adx || 0;
@@ -771,6 +779,17 @@ function buildCard(r) {
       <span class="sk-m-val ${r.rsi>=60?'bull':r.rsi<=40?'bear':''}">${r.rsi>=70?'Overbought':r.rsi>=55?'Bullish':r.rsi<=30?'Oversold':r.rsi<=45?'Bearish':'Neutral'}</span>
     </div>
   </div>
+
+  <!-- ─── EMA8 Status ─── -->
+  ${hasE8 ? `
+  <div class="ema8-row">
+    <span class="ema8-label">8 EMA</span>
+    ${e8riding ? `<span class="ema8-badge riding">Riding ✓${e8pct != null ? ` +${e8pct}%` : ''}</span>` :
+     e8ext    ? `<span class="ema8-badge extended">Extended${e8pct != null ? ` +${e8pct}%` : ''}</span>` :
+     e8above  ? `<span class="ema8-badge above">Above${e8pct != null ? ` +${e8pct}%` : ''}</span>` :
+                `<span class="ema8-badge below">Below EMA8</span>`}
+    ${r.above_ema200 ? `<span class="ema8-badge above200">Above 200 SMA ✓</span>` : ''}
+  </div>` : ''}
 
   <!-- ─── Current price ─── -->
   <div class="sk-price-row">
@@ -858,8 +877,8 @@ function buildCard(r) {
   <!-- ─── Gap Badge ─── -->
   ${hasGap ? `
   <div class="gap-badge-row">
-    <span class="gap-badge ${gapPct > 0 ? 'gap-up' : 'gap-down'}">
-      ${gapPct > 0 ? '↑' : '↓'} Gap ${gapPct > 0 ? '+' : ''}${gapPct.toFixed(2)}% at open
+    <span class="gap-badge ${gapPct > 0 ? 'gap-up' : 'gap-down'}${bigGap ? ' gap-strong' : ''}">
+      ${gapPct > 0 ? '↑' : '↓'}${bigGap ? ' 🚀' : ''} Gap ${gapPct > 0 ? '+' : ''}${gapPct.toFixed(2)}% at open
     </span>
   </div>` : ''}
 

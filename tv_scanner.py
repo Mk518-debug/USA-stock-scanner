@@ -242,6 +242,7 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
         'name', 'description', 'close', 'change', 'change_abs',
         f'Recommend.All{sf}', f'Recommend.MA{sf}', f'Recommend.Other{sf}',
         f'RSI{sf}', f'MACD.macd{sf}', f'MACD.signal{sf}',
+        f'EMA8{sf}',           # 8 EMA — key momentum/entry indicator
         f'EMA20{sf}', f'EMA50{sf}', f'EMA200{sf}',
         'volume', 'average_volume_10d_calc',
         'ATR', 'ADX', 'ADX+DI', 'ADX-DI',
@@ -323,6 +324,7 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
         rsi  = cm.get(f'RSI{sf}')          or 0
         macd = cm.get(f'MACD.macd{sf}')    or 0
         msig = cm.get(f'MACD.signal{sf}')  or 0
+        e8   = cm.get(f'EMA8{sf}')         or 0
         e20  = cm.get(f'EMA20{sf}')        or 0
         e50  = cm.get(f'EMA50{sf}')        or 0
         e200 = cm.get(f'EMA200{sf}')
@@ -417,6 +419,21 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
         prev_close  = price - change_abs if change_abs else price
         gap_pct     = round((open_p - prev_close) / prev_close * 100, 2) if prev_close > 0 else 0
 
+        # ── 8 EMA signals ────────────────────────────────────────────────────
+        above_e8    = bool(e8 and price > e8)
+        # "riding" = above EMA8 and within 3% of it (tight, not extended)
+        e8_riding   = bool(e8 and above_e8 and (price - e8) / e8 <= 0.03)
+        # "extended" = price far above EMA8 (>8%) — caution, may pull back
+        e8_extended = bool(e8 and above_e8 and (price - e8) / e8 > 0.08)
+        e8_pct      = round((price - e8) / e8 * 100, 1) if e8 else None
+
+        # 200 SMA reclaim: above e200 and not far above it (recently reclaimed)
+        above_e200_now = bool(e200 and price > e200)
+        e200_reclaim   = bool(e200 and above_e200_now and (price - e200) / e200 <= 0.05)
+
+        # Oversold bounce: RSI was low, now closing above 8 EMA (entry signal)
+        oversold_bounce = bool(rsi and rsi < 45 and above_e8 and not e8_extended)
+
         # ── Build patterns list ───────────────────────────────────────────────
         patterns = []
         if adx_val > 20 and pdi > ndi:   patterns.append('ADX Bullish')
@@ -428,8 +445,13 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
         if mtf_bear_count >= 4:           patterns.append('4/4 TF Aligned ▼')
         if week52_pos is not None and week52_pos >= 90: patterns.append('Near 52W High 🚀')
         if week52_pos is not None and week52_pos <= 10: patterns.append('Near 52W Low 🔻')
-        if gap_pct >= 2.0:                patterns.append(f'Gap Up +{gap_pct}%')
-        elif gap_pct <= -2.0:             patterns.append(f'Gap Down {gap_pct}%')
+        # Gap threshold raised to 3% to match swing-trade quality bar
+        if gap_pct >= 3.0:                patterns.append(f'Gap Up +{gap_pct}%')
+        elif gap_pct <= -3.0:             patterns.append(f'Gap Down {gap_pct}%')
+        # New swing-trade signal tags
+        if e8_riding and above_e200_now:  patterns.append('8 EMA Ride ✓')
+        if e200_reclaim:                  patterns.append('200 SMA Reclaim')
+        if oversold_bounce:               patterns.append('Oversold Bounce')
 
         results.append({
             'symbol':        sym,
@@ -450,9 +472,15 @@ def scan_tv(sector='all', timeframe='1d', min_score=40, limit=200,
             'rsi':           round(rsi, 1),
             'macd':          round(macd, 4),
             'macd_signal':   round(msig, 4),
+            'ema8':          round(e8, 4) if e8 else None,
             'ema20':         round(e20, 4),
             'ema50':         round(e50, 4),
             'ema200':        round(e200, 4) if e200 else None,
+            'above_ema8':    above_e8,
+            'ema8_riding':   e8_riding,
+            'ema8_extended': e8_extended,
+            'ema8_pct':      e8_pct,
+            'above_ema200':  above_e200_now,
             'volume':        int(vol),
             'vol_ratio':     vr,
             'atr':           round(atr, 4),
