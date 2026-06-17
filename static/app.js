@@ -1762,8 +1762,9 @@ function _buildSurgeRow(r) {
                : r.rsi <= 30 ? 'rsi-cold'
                : '';
 
+  const _surgeTvUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.tv_symbol||r.symbol)}`;
   return `
-    <tr class="vs-row" onclick="openChart('${r.tv_symbol}','${r.name}')">
+    <tr class="vs-row" onclick="window.open('${_surgeTvUrl}','_blank')">
       <td class="vs-sym">
         <span class="vs-sym-txt">${r.symbol}</span>
         <span class="vs-tier">${tierLabel}</span>
@@ -1780,7 +1781,7 @@ function _buildSurgeRow(r) {
       <td><span class="vs-sig-badge" style="background:${sigColor}20;color:${sigColor};border:1px solid ${sigColor}40">${r.signal}</span></td>
       <td><span class="vs-ema-badge ${emaCls}">${emaPos}</span></td>
       <td class="vs-sector">${r.sector}</td>
-      <td><button class="vs-chart-btn" onclick="event.stopPropagation();openChart('${r.tv_symbol}','${r.name}')">📈</button></td>
+      <td><a href="${_surgeTvUrl}" target="_blank" rel="noopener" class="vs-chart-btn" onclick="event.stopPropagation()">📈</a></td>
     </tr>`;
 }
 
@@ -1877,7 +1878,7 @@ function _buildFlowRow(r) {
     : `<span style="color:var(--text3);font-size:.72rem">—</span>`;
 
   return `
-    <tr class="vs-row" onclick="openChart('${tvSym}','${r.name}')">
+    <tr class="vs-row" onclick="window.open('https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSym)}','_blank')">
       <td class="vs-sym">
         <span class="vs-sym-txt">${r.symbol}</span>
         <span class="vs-tier">${r.exchange || ''}</span>
@@ -1891,6 +1892,6 @@ function _buildFlowRow(r) {
       <td><span class="vs-sig-badge" style="background:${flowColor}20;color:${flowColor};border:1px solid ${flowColor}40">${r.flow_label}</span></td>
       <td class="ta-r">${sweepBadge}</td>
       <td class="vs-sector">${r.sector || '—'}</td>
-      <td><button class="vs-chart-btn" onclick="event.stopPropagation();openChart('${tvSym}','${r.name}')">📈</button></td>
+      <td><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSym)}" target="_blank" rel="noopener" class="vs-chart-btn" onclick="event.stopPropagation()">📈</a></td>
     </tr>`;
 }
